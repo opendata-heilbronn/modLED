@@ -54,6 +54,7 @@ Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_cortex.c \
 Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_pwr.c \
 Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_flash.c \
 Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_flash_ex.c \
+Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_uart.c \
 Src/system_stm32f1xx.c  
 
 # ASM sources
