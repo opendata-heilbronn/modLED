@@ -1,3 +1,8 @@
 build/*
 !*.elf
 !*.bin
+.pioenvs
+.piolibdeps
+.vscode
+readme.txt
+.travis.yml
