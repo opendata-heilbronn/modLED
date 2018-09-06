@@ -46,7 +46,7 @@
 
 /* Private variables ---------------------------------------------------------*/
 TIM_HandleTypeDef htim4;
-DMA_HandleTypeDef hdma_tim4_up;
+DMA_HandleTypeDef hdma_tim4_ch1;
 
 UART_HandleTypeDef huart1;
 
@@ -78,7 +78,7 @@ void dataTransmittedHandler(DMA_HandleTypeDef *hdma) {
   /* Stop timer */
   __HAL_TIM_DISABLE(&htim4);
   /* Reconfigure DMA */
-  HAL_DMA_Start_IT(htim4.hdma[TIM_DMA_ID_UPDATE], (uint32_t)&dmaBuf, (uint32_t)&GPIOA->ODR, DMA_BUF_LENGTH);
+  HAL_DMA_Start_IT(htim4.hdma[TIM_DMA_ID_CC1], (uint32_t)&dmaBuf, (uint32_t)&GPIOA->ODR, DMA_BUF_LENGTH);
   
   /* Start timer for new data transmit */
   __HAL_TIM_ENABLE(&htim4);
@@ -125,15 +125,15 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   //crashes if enabled
-  htim4.hdma[TIM_DMA_ID_UPDATE]->XferCpltCallback = dataTransmittedHandler;
-  htim4.hdma[TIM_DMA_ID_UPDATE]->XferErrorCallback = transmitErrorHandler;
+  htim4.hdma[TIM_DMA_ID_CC1]->XferCpltCallback = dataTransmittedHandler;
+  htim4.hdma[TIM_DMA_ID_CC1]->XferErrorCallback = transmitErrorHandler;
 
   for(uint32_t i = 0; i < DMA_BUF_LENGTH; i++) {
     dmaBuf[i] = i % 255;
   }
 
   //crashes if enabled
-  HAL_DMA_Start_IT(htim4.hdma[TIM_DMA_ID_UPDATE], (uint32_t)&dmaBuf, (uint32_t)&GPIOA->ODR, DMA_BUF_LENGTH);
+  HAL_DMA_Start_IT(htim4.hdma[TIM_DMA_ID_CC1], (uint32_t)&dmaBuf, (uint32_t)&GPIOA->ODR, DMA_BUF_LENGTH);
   
   __HAL_TIM_ENABLE_DMA(&htim4, TIM_DMA_UPDATE);
 
@@ -222,16 +222,28 @@ void SystemClock_Config(void)
 static void MX_TIM4_Init(void)
 {
 
+  TIM_ClockConfigTypeDef sClockSourceConfig;
   TIM_MasterConfigTypeDef sMasterConfig;
   TIM_OC_InitTypeDef sConfigOC;
 
   htim4.Instance = TIM4;
-  htim4.Init.Prescaler = 0;
+  htim4.Init.Prescaler = 71;
   htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim4.Init.Period = 0;
+  htim4.Init.Period = 3;
   htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_OC_Init(&htim4) != HAL_OK)
+  if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim4, &sClockSourceConfig) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+  if (HAL_TIM_PWM_Init(&htim4) != HAL_OK)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
@@ -243,11 +255,11 @@ static void MX_TIM4_Init(void)
     _Error_Handler(__FILE__, __LINE__);
   }
 
-  sConfigOC.OCMode = TIM_OCMODE_FORCED_ACTIVE;
-  sConfigOC.Pulse = 0;
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 2;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-  if (HAL_TIM_OC_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  if (HAL_TIM_PWM_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
@@ -302,9 +314,9 @@ static void MX_DMA_Init(void)
   __HAL_RCC_DMA1_CLK_ENABLE();
 
   /* DMA interrupt init */
-  /* DMA1_Channel7_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel7_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Channel7_IRQn);
+  /* DMA1_Channel1_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
 
 }
 
