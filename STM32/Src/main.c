@@ -138,6 +138,8 @@ int main(void)
   __HAL_TIM_ENABLE_DMA(&htim4, TIM_DMA_UPDATE);
 
   __HAL_TIM_ENABLE(&htim4);
+
+  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
   
   /* USER CODE END 2 */
 
@@ -151,9 +153,9 @@ int main(void)
   /* USER CODE BEGIN 3 */
 
   GPIOC->ODR |= GPIO_PIN_13;
-  HAL_Delay(1);
+  HAL_Delay(100);
   GPIOC->ODR &= ~GPIO_PIN_13;
-  HAL_Delay(7);
+  HAL_Delay(100);
 
   }
   /* USER CODE END 3 */
@@ -229,7 +231,7 @@ static void MX_TIM4_Init(void)
   htim4.Instance = TIM4;
   htim4.Init.Prescaler = 71;
   htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim4.Init.Period = 3;
+  htim4.Init.Period = 1;
   htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
@@ -256,7 +258,7 @@ static void MX_TIM4_Init(void)
   }
 
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 2;
+  sConfigOC.Pulse = 1;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_PWM_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
