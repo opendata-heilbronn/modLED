@@ -76,11 +76,13 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 /* USER CODE BEGIN 0 */
 void dataTransmittedHandler(DMA_HandleTypeDef *hdma) {
   /* Stop timer */
+  HAL_TIM_PWM_Stop(&htim4, TIM_CHANNEL_1);
   __HAL_TIM_DISABLE(&htim4);
   /* Reconfigure DMA */
   HAL_DMA_Start_IT(htim4.hdma[TIM_DMA_ID_CC1], (uint32_t)&dmaBuf, (uint32_t)&GPIOA->ODR, DMA_BUF_LENGTH);
   
   /* Start timer for new data transmit */
+  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
   __HAL_TIM_ENABLE(&htim4);
 }
 
@@ -124,18 +126,16 @@ int main(void)
   MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
 
-  //crashes if enabled
   htim4.hdma[TIM_DMA_ID_CC1]->XferCpltCallback = dataTransmittedHandler;
   htim4.hdma[TIM_DMA_ID_CC1]->XferErrorCallback = transmitErrorHandler;
 
   for(uint32_t i = 0; i < DMA_BUF_LENGTH; i++) {
-    dmaBuf[i] = i % 255;
+    dmaBuf[i] = i % 256;
   }
 
-  //crashes if enabled
   HAL_DMA_Start_IT(htim4.hdma[TIM_DMA_ID_CC1], (uint32_t)&dmaBuf, (uint32_t)&GPIOA->ODR, DMA_BUF_LENGTH);
   
-  __HAL_TIM_ENABLE_DMA(&htim4, TIM_DMA_UPDATE);
+  __HAL_TIM_ENABLE_DMA(&htim4, TIM_DMA_CC1);
 
   __HAL_TIM_ENABLE(&htim4);
 
@@ -229,7 +229,7 @@ static void MX_TIM4_Init(void)
   TIM_OC_InitTypeDef sConfigOC;
 
   htim4.Instance = TIM4;
-  htim4.Init.Prescaler = 71;
+  htim4.Init.Prescaler = 5;
   htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim4.Init.Period = 1;
   htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
