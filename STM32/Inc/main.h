@@ -58,6 +58,9 @@
 
 /* USER CODE BEGIN Private defines */
 
+#define PIN_OE  GPIOB, GPIO_PIN_4
+#define PIN_LAT GPIOB, GPIO_PIN_5
+
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus
