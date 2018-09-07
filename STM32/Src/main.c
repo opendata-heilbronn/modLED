@@ -41,7 +41,9 @@
 #include "stm32f1xx_hal.h"
 
 /* USER CODE BEGIN Includes */
-
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
@@ -55,8 +57,32 @@ PCD_HandleTypeDef hpcd_USB_FS;
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
-#define DMA_BUF_LENGTH 128
-uint8_t dmaBuf[DMA_BUF_LENGTH];
+
+
+#define PANEL_HEIGHT  8
+#define PANEL_WIDTH   16
+#define NUM_PIXELS    (PANEL_HEIGHT * PANEL_WIDTH)
+#define PWM_RESOLUTION     8
+
+#define DMA_BUF_LENGTH  NUM_PIXELS
+uint8_t dmaBuf1[DMA_BUF_LENGTH], dmaBuf2[DMA_BUF_LENGTH];
+uint8_t* dmaBufs[] = {dmaBuf1, dmaBuf2};
+uint8_t curDmaBuf = 0;
+
+// color mapping: [r1, r2, g, b]
+uint32_t frameBuf[NUM_PIXELS];
+
+uint8_t outputBuf[NUM_PIXELS * 4];
+
+uint16_t pwmCounter = 0;
+
+/*typedef __attribute__((__packed__)) struct {
+  uint8_t r1;
+  uint8_t r2;
+  uint8_t g;
+  uint8_t b;
+} color_t;*/
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -77,6 +103,41 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 /* USER CODE END PFP */
 
 /* USER CODE BEGIN 0 */
+
+
+void mapFrameBuf() {
+  for(uint16_t y = 0; y < PANEL_HEIGHT; y++) {
+    uint16_t rowIndex = y * PANEL_WIDTH;
+    for(uint16_t x = 0; x < PANEL_WIDTH; x++) {
+      uint16_t pixelIndex = rowIndex + x;
+      uint32_t pixelColor = frameBuf[pixelIndex];
+
+      // does not differentiate between upper and lower half
+      uint16_t matrixIndex = ((x / 4) * 16) + ((y % 4) * 4) + (x % 4); 
+
+      uint8_t half = (y / 4); // 0 = upper half, 1 = lower half
+
+      for(uint8_t c = 0; c < 4; c++) {
+        outputBuf[matrixIndex * 8 + half * 4 + (3 - c)] = (pixelColor >> (8 * c)) & 0xFF;
+      }
+      /*for(uint8_t i = 0; i < 4; i++) {
+        outBuf[half * 4 + i] = pixelColor & ((0xFF) << (8 * i));
+      }*/
+    }
+  }
+}
+
+void mapDmaBufPWM() {
+  for(uint16_t i = 0; i < (NUM_PIXELS / 8); i++) {
+    dmaBufs[curDmaBuf][i] = 0;
+    for(uint8_t j = 0; j < 8; j++) {
+      if(outputBuf[(i * 8) + j] > (uint8_t)pwmCounter) {
+        dmaBufs[curDmaBuf][i] |= 1 << j;
+      }
+    }
+  }
+}
+
 void dataTransmittedHandler(DMA_HandleTypeDef *hdma) {
   HAL_GPIO_WritePin(PIN_LAT, 1);
 
@@ -84,20 +145,27 @@ void dataTransmittedHandler(DMA_HandleTypeDef *hdma) {
   HAL_TIM_PWM_Stop(&htim4, TIM_CHANNEL_1);
   __HAL_TIM_DISABLE(&htim4);
 
-  /* latch data to LED output */
-  
+  /* latch previously written data to LED output */
+
   HAL_GPIO_WritePin(PIN_LAT, 0);
 
+  // generate new data
+  pwmCounter++;
+  //mapDmaBufPWM();
+  if(pwmCounter >= (1 << PWM_RESOLUTION) - 1)
+    pwmCounter = 0;
+
   /* Reconfigure DMA */
-  HAL_DMA_Start_IT(htim4.hdma[TIM_DMA_ID_CC1], (uint32_t)&dmaBuf, (uint32_t)&GPIOA->ODR, DMA_BUF_LENGTH);
-  
+  HAL_DMA_Start_IT(htim4.hdma[TIM_DMA_ID_CC1], (uint32_t)dmaBufs[curDmaBuf], (uint32_t)&GPIOA->ODR, DMA_BUF_LENGTH);
+  curDmaBuf = !curDmaBuf;
+
   /* Start timer for new data transmit */
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
   __HAL_TIM_ENABLE(&htim4);
 }
 
-void transmitErrorHandler(DMA_HandleTypeDef *hdma) {
-  __HAL_TIM_DISABLE(&htim4);
+void transmitErrorHandler(DMA_HandleTypeDef *hdma) { 
+  __HAL_TIM_DISABLE(&htim4); 
 }
 /* USER CODE END 0 */
 
@@ -140,38 +208,49 @@ int main(void)
   htim4.hdma[TIM_DMA_ID_CC1]->XferCpltCallback = dataTransmittedHandler;
   htim4.hdma[TIM_DMA_ID_CC1]->XferErrorCallback = transmitErrorHandler;
 
-  for(uint32_t i = 0; i < DMA_BUF_LENGTH; i++) {
-    dmaBuf[i] = i % 256;
+  // direct writing to DMA buffer somehow works
+  // for (uint32_t i = 0; i < DMA_BUF_LENGTH; i++) {
+  //   dmaBufs[curDmaBuf[i] = i % 256;
+  // }
+
+  for(uint32_t i = 0; i < NUM_PIXELS; i++) {
+    frameBuf[i] = 1 << (i % 32);
   }
 
-  HAL_DMA_Start_IT(htim4.hdma[TIM_DMA_ID_CC1], (uint32_t)&dmaBuf, (uint32_t)&GPIOA->ODR, DMA_BUF_LENGTH);
+  frameBuf[20] = 0xFF804020;
+  
+  // but generating DMA buffer contents does not, even if correct bytes are within
+  mapFrameBuf();
+  mapDmaBufPWM();
+
+  HAL_DMA_Start_IT(htim4.hdma[TIM_DMA_ID_CC1], (uint32_t)dmaBufs[curDmaBuf], (uint32_t)&GPIOA->ODR, DMA_BUF_LENGTH);
   __HAL_TIM_ENABLE_DMA(&htim4, TIM_DMA_CC1);
   __HAL_TIM_ENABLE(&htim4);
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
 
-
   __HAL_TIM_ENABLE(&htim3);
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
 
-
   HAL_GPIO_WritePin(PIN_OE, 0);
-  
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
-  {
+  while (1) {
 
   /* USER CODE END WHILE */
 
   /* USER CODE BEGIN 3 */
 
-  GPIOC->ODR |= GPIO_PIN_13;
-  HAL_Delay(100);
-  GPIOC->ODR &= ~GPIO_PIN_13;
-  HAL_Delay(100);
-
+    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+    //HAL_Delay(100);
+    //for(uint16_t i = 0; i < NUM_PIXELS; i++) {
+      char msg[100];
+      //sprintf(msg, "%03d %08x %02x%02x%02x%02x %02x\n", pwmCounter, frameBuf[0], outputBuf[0], outputBuf[1], outputBuf[2], outputBuf[3], dmaBufs[curDmaBuf][0]);
+      sprintf(msg, "%02x", dmaBufs[curDmaBuf][0]);
+      HAL_UART_Transmit(&huart1, msg, strlen(msg), 1000);
+    //}
   }
   /* USER CODE END 3 */
 
@@ -460,14 +539,14 @@ static void MX_GPIO_Init(void)
 void _Error_Handler(char *file, int line)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
-  /* User can add his own implementation to report the HAL error return state */
-  while(1)
-  {
-    GPIOC->ODR |= GPIO_PIN_13;
-    HAL_Delay(100);
-    GPIOC->ODR &= ~GPIO_PIN_13;
-    HAL_Delay(100);
-  }
+    /* User can add his own implementation to report the HAL error return state */
+    while(1)
+    {
+        GPIOC->ODR |= GPIO_PIN_13;
+        HAL_Delay(100);
+        GPIOC->ODR &= ~GPIO_PIN_13;
+        HAL_Delay(100);
+    }
   /* USER CODE END Error_Handler_Debug */
 }
 
@@ -482,8 +561,8 @@ void _Error_Handler(char *file, int line)
 void assert_failed(uint8_t* file, uint32_t line)
 { 
   /* USER CODE BEGIN 6 */
-  /* User can add his own implementation to report the file name and line number,
-     tex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+    /* User can add his own implementation to report the file name and line number,
+       tex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
