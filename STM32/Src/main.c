@@ -48,8 +48,10 @@
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
+TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim4;
+DMA_HandleTypeDef hdma_tim1_ch1;
 DMA_HandleTypeDef hdma_tim4_ch1;
 
 UART_HandleTypeDef huart1;
@@ -63,7 +65,7 @@ PCD_HandleTypeDef hpcd_USB_FS;
 #define PANEL_HEIGHT  8
 #define PANEL_WIDTH   16
 #define NUM_PIXELS    (PANEL_HEIGHT * PANEL_WIDTH)
-#define PWM_RESOLUTION     8
+#define PWM_RESOLUTION     6
 
 #define DMA_BUF_LENGTH  ((NUM_PIXELS / 2) + 2)
 uint8_t dmaBuf1[DMA_BUF_LENGTH], dmaBuf2[DMA_BUF_LENGTH];
@@ -81,6 +83,8 @@ uint8_t outputBuf[NUM_PIXELS * 8];
 uint16_t pwmCounter = 0;
 bool dmaTransferDone = false;
 
+#define DMA_TIMER htim1
+
 /*typedef __attribute__((__packed__)) struct {
   uint8_t r1;
   uint8_t r2;
@@ -97,8 +101,10 @@ static void MX_DMA_Init(void);
 static void MX_USB_PCD_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_TIM4_Init(void);
-static void MX_TIM3_Init(void);                                    
+static void MX_TIM3_Init(void);
+static void MX_TIM1_Init(void);                                    
 void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
+                                
                                 
                                 
 
@@ -160,14 +166,14 @@ void dataTransmittedHandler(DMA_HandleTypeDef *hdma) {
   HAL_GPIO_WritePin(PIN_LAT, 1);
 
   /* Stop timer */
-  HAL_TIM_PWM_Stop(&htim4, TIM_CHANNEL_1);
-  //__HAL_TIM_DISABLE(&htim4);
+  HAL_TIM_PWM_Stop(&DMA_TIMER, TIM_CHANNEL_1);
+  //__HAL_TIM_DISABLE(&DMA_TIMER);
 
 
 
   /* Reconfigure DMA */
-  //HAL_DMA_Abort(htim4.hdma[TIM_DMA_ID_CC1]);
-  if(HAL_DMA_Start_IT(htim4.hdma[TIM_DMA_ID_CC1], (uint32_t)dmaBufs[curDmaBufIdx], (uint32_t)&GPIOA->ODR, DMA_BUF_LENGTH) != HAL_OK) {
+  //HAL_DMA_Abort(DMA_TIMER.hdma[TIM_DMA_ID_CC1]);
+  if(HAL_DMA_Start_IT(DMA_TIMER.hdma[TIM_DMA_ID_CC1], (uint32_t)dmaBufs[curDmaBufIdx], (uint32_t)&GPIOA->ODR, DMA_BUF_LENGTH) != HAL_OK) {
     _Error_Handler(__FILE__, __LINE__);
   }
   curDmaBufIdx = !curDmaBufIdx;
@@ -175,13 +181,13 @@ void dataTransmittedHandler(DMA_HandleTypeDef *hdma) {
   dmaTransferDone = true;
 
   /* Start timer for new data transmit */
-  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
-  //__HAL_TIM_ENABLE(&htim4);
+  HAL_TIM_PWM_Start(&DMA_TIMER, TIM_CHANNEL_1);
+  //__HAL_TIM_ENABLE(&DMA_TIMER);
   HAL_GPIO_WritePin(PIN_LAT, 0);
 }
 
 void transmitErrorHandler(DMA_HandleTypeDef *hdma) { 
-  __HAL_TIM_DISABLE(&htim4); 
+  __HAL_TIM_DISABLE(&DMA_TIMER); 
 }
 /* USER CODE END 0 */
 
@@ -219,10 +225,11 @@ int main(void)
   MX_USART1_UART_Init();
   MX_TIM4_Init();
   MX_TIM3_Init();
+  MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
 
-  htim4.hdma[TIM_DMA_ID_CC1]->XferCpltCallback = dataTransmittedHandler;
-  htim4.hdma[TIM_DMA_ID_CC1]->XferErrorCallback = transmitErrorHandler;
+  DMA_TIMER.hdma[TIM_DMA_ID_CC1]->XferCpltCallback = dataTransmittedHandler;
+  DMA_TIMER.hdma[TIM_DMA_ID_CC1]->XferErrorCallback = transmitErrorHandler;
   
 
   // direct writing to DMA buffer somehow works
@@ -243,13 +250,13 @@ int main(void)
   // but generating DMA buffer contents does not, even if correct bytes are within
   mapFrameBuf();
   mapDmaBufPWM();
-  //HAL_DMA_Abort(htim4.hdma[TIM_DMA_ID_CC1]);
-  if(HAL_DMA_Start_IT(htim4.hdma[TIM_DMA_ID_CC1], (uint32_t)dmaBufs[curDmaBufIdx], (uint32_t)&GPIOA->ODR, DMA_BUF_LENGTH) != HAL_OK) {
+  //HAL_DMA_Abort(DMA_TIMER.hdma[TIM_DMA_ID_CC1]);
+  if(HAL_DMA_Start_IT(DMA_TIMER.hdma[TIM_DMA_ID_CC1], (uint32_t)dmaBufs[curDmaBufIdx], (uint32_t)&GPIOA->ODR, DMA_BUF_LENGTH) != HAL_OK) {
     _Error_Handler(__FILE__, __LINE__);
   }
-  __HAL_TIM_ENABLE_DMA(&htim4, TIM_DMA_CC1);
-  __HAL_TIM_ENABLE(&htim4);
-  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
+  __HAL_TIM_ENABLE_DMA(&DMA_TIMER, TIM_DMA_CC1);
+  __HAL_TIM_ENABLE(&DMA_TIMER);
+  HAL_TIM_PWM_Start(&DMA_TIMER, TIM_CHANNEL_1);
 
   __HAL_TIM_ENABLE(&htim3);
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
@@ -348,6 +355,73 @@ void SystemClock_Config(void)
 
   /* SysTick_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
+}
+
+/* TIM1 init function */
+static void MX_TIM1_Init(void)
+{
+
+  TIM_ClockConfigTypeDef sClockSourceConfig;
+  TIM_MasterConfigTypeDef sMasterConfig;
+  TIM_OC_InitTypeDef sConfigOC;
+  TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig;
+
+  htim1.Instance = TIM1;
+  htim1.Init.Prescaler = 35;
+  htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim1.Init.Period = 1;
+  htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim1.Init.RepetitionCounter = 0;
+  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim1, &sClockSourceConfig) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+  if (HAL_TIM_PWM_Init(&htim1) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 1;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
+  sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
+  if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+  sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_DISABLE;
+  sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_DISABLE;
+  sBreakDeadTimeConfig.LockLevel = TIM_LOCKLEVEL_OFF;
+  sBreakDeadTimeConfig.DeadTime = 0;
+  sBreakDeadTimeConfig.BreakState = TIM_BREAK_DISABLE;
+  sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
+  sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
+  if (HAL_TIMEx_ConfigBreakDeadTime(&htim1, &sBreakDeadTimeConfig) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+  HAL_TIM_MspPostInit(&htim1);
+
 }
 
 /* TIM3 init function */
@@ -499,6 +573,9 @@ static void MX_DMA_Init(void)
   /* DMA1_Channel1_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
+  /* DMA1_Channel2_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
 
 }
 
