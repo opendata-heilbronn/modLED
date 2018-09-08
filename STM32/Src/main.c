@@ -64,7 +64,7 @@ PCD_HandleTypeDef hpcd_USB_FS;
 #define NUM_PIXELS    (PANEL_HEIGHT * PANEL_WIDTH)
 #define PWM_RESOLUTION     8
 
-#define DMA_BUF_LENGTH  NUM_PIXELS
+#define DMA_BUF_LENGTH  (NUM_PIXELS / 2)
 uint8_t dmaBuf1[DMA_BUF_LENGTH], dmaBuf2[DMA_BUF_LENGTH];
 uint8_t* dmaBufs[] = {dmaBuf1, dmaBuf2};
 uint8_t curDmaBuf = 0;
@@ -72,7 +72,7 @@ uint8_t curDmaBuf = 0;
 // color mapping: [r1, r2, g, b]
 uint32_t frameBuf[NUM_PIXELS];
 
-uint8_t outputBuf[NUM_PIXELS * 4];
+uint8_t outputBuf[NUM_PIXELS * 8];
 
 uint16_t pwmCounter = 0;
 
@@ -151,12 +151,17 @@ void dataTransmittedHandler(DMA_HandleTypeDef *hdma) {
 
   // generate new data
   pwmCounter++;
-  //mapDmaBufPWM();
-  if(pwmCounter >= (1 << PWM_RESOLUTION) - 1)
+  mapDmaBufPWM();
+  if(pwmCounter >= (1 << PWM_RESOLUTION) - 1) { // frame rendering finished
     pwmCounter = 0;
+    mapFrameBuf(); // generate next frame
+  }
 
   /* Reconfigure DMA */
-  HAL_DMA_Start_IT(htim4.hdma[TIM_DMA_ID_CC1], (uint32_t)dmaBufs[curDmaBuf], (uint32_t)&GPIOA->ODR, DMA_BUF_LENGTH);
+  //HAL_DMA_Abort(htim4.hdma[TIM_DMA_ID_CC1]);
+  if(HAL_DMA_Start_IT(htim4.hdma[TIM_DMA_ID_CC1], (uint32_t)dmaBufs[curDmaBuf], (uint32_t)&GPIOA->ODR, DMA_BUF_LENGTH) != HAL_OK) {
+    _Error_Handler(__FILE__, __LINE__);
+  }
   curDmaBuf = !curDmaBuf;
 
   /* Start timer for new data transmit */
@@ -207,23 +212,35 @@ int main(void)
 
   htim4.hdma[TIM_DMA_ID_CC1]->XferCpltCallback = dataTransmittedHandler;
   htim4.hdma[TIM_DMA_ID_CC1]->XferErrorCallback = transmitErrorHandler;
+  
 
   // direct writing to DMA buffer somehow works
-  // for (uint32_t i = 0; i < DMA_BUF_LENGTH; i++) {
-  //   dmaBufs[curDmaBuf[i] = i % 256;
-  // }
+  for (uint32_t i = 0; i < DMA_BUF_LENGTH; i++) {
+    // uint8_t pattern = i % 4;
+    // dmaBufs[curDmaBuf][i] = ((pattern & 0xF) << 4)  | (pattern & 0xF);
+    dmaBufs[0][i] = 0;
+    dmaBufs[1][i] = 0;
+    // dmaBufs[curDmaBuf][i] = 0xFF;
+  }
+  dmaBufs[0][0] = 0xFF;
+  dmaBufs[1][0] = 0xFF;
 
   for(uint32_t i = 0; i < NUM_PIXELS; i++) {
-    frameBuf[i] = 1 << (i % 32);
+    // frameBuf[i] = 1 << (i % 32);
   }
 
-  frameBuf[20] = 0xFF804020;
+  frameBuf[1] = 0xFF804020; //this works, but off by one
+  frameBuf[3] = 0xFF804020; //this works, but off by one
+  frameBuf[10] = 0xFF804020; //this doesn't
+  frameBuf[20] = 0xFF804020; //this too
   
   // but generating DMA buffer contents does not, even if correct bytes are within
   mapFrameBuf();
   mapDmaBufPWM();
-
-  HAL_DMA_Start_IT(htim4.hdma[TIM_DMA_ID_CC1], (uint32_t)dmaBufs[curDmaBuf], (uint32_t)&GPIOA->ODR, DMA_BUF_LENGTH);
+  //HAL_DMA_Abort(htim4.hdma[TIM_DMA_ID_CC1]);
+  if(HAL_DMA_Start_IT(htim4.hdma[TIM_DMA_ID_CC1], (uint32_t)dmaBufs[curDmaBuf], (uint32_t)&GPIOA->ODR, DMA_BUF_LENGTH) != HAL_OK) {
+    _Error_Handler(__FILE__, __LINE__);
+  }
   __HAL_TIM_ENABLE_DMA(&htim4, TIM_DMA_CC1);
   __HAL_TIM_ENABLE(&htim4);
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
@@ -244,7 +261,7 @@ int main(void)
   /* USER CODE BEGIN 3 */
 
     HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
-    //HAL_Delay(100);
+    HAL_Delay(100);
     //for(uint16_t i = 0; i < NUM_PIXELS; i++) {
       char msg[100];
       //sprintf(msg, "%03d %08x %02x%02x%02x%02x %02x\n", pwmCounter, frameBuf[0], outputBuf[0], outputBuf[1], outputBuf[2], outputBuf[3], dmaBufs[curDmaBuf][0]);
@@ -542,10 +559,6 @@ void _Error_Handler(char *file, int line)
     /* User can add his own implementation to report the HAL error return state */
     while(1)
     {
-        GPIOC->ODR |= GPIO_PIN_13;
-        HAL_Delay(100);
-        GPIOC->ODR &= ~GPIO_PIN_13;
-        HAL_Delay(100);
     }
   /* USER CODE END Error_Handler_Debug */
 }
