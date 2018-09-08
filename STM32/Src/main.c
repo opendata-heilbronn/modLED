@@ -44,6 +44,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
@@ -64,10 +65,13 @@ PCD_HandleTypeDef hpcd_USB_FS;
 #define NUM_PIXELS    (PANEL_HEIGHT * PANEL_WIDTH)
 #define PWM_RESOLUTION     8
 
-#define DMA_BUF_LENGTH  ((NUM_PIXELS / 2) + 1)
+#define DMA_BUF_LENGTH  ((NUM_PIXELS / 2) + 2)
 uint8_t dmaBuf1[DMA_BUF_LENGTH], dmaBuf2[DMA_BUF_LENGTH];
 uint8_t* dmaBufs[] = {dmaBuf1, dmaBuf2};
-uint8_t curDmaBuf = 0;
+uint8_t* curDmaBuf = dmaBuf1;
+uint8_t curDmaBufIdx = 0;
+
+//uint8_t pwmLookup[NUM_PIXELS/2 * (1 << PWM_RESOLUTION)]; //too big at 16KB
 
 // color mapping: [r1, r2, g, b]
 uint32_t frameBuf[NUM_PIXELS];
@@ -75,6 +79,7 @@ uint32_t frameBuf[NUM_PIXELS];
 uint8_t outputBuf[NUM_PIXELS * 8];
 
 uint16_t pwmCounter = 0;
+bool dmaTransferDone = false;
 
 /*typedef __attribute__((__packed__)) struct {
   uint8_t r1;
@@ -115,7 +120,7 @@ void mapFrameBuf() {
       // does not differentiate between upper and lower half
       uint16_t matrixIndex = ((x / 4) * 16) + ((y % 4) * 4) + (x % 4); 
 
-      uint8_t half = (y / 4); // 0 = upper half, 1 = lower half
+      bool half = (y / 4); // 0 = upper half, 1 = lower half
 
       for(uint8_t c = 0; c < 4; c++) {
         outputBuf[matrixIndex * 8 + half * 4 + (3 - c)] = (pixelColor >> (8 * c)) & 0xFF;
@@ -129,44 +134,50 @@ void mapFrameBuf() {
 
 void mapDmaBufPWM() {
   for(uint16_t i = 0; i < (NUM_PIXELS / 2); i++) {
-    dmaBufs[curDmaBuf][i] = 0;
-    for(uint8_t j = 0; j < 8; j++) {
+    uint8_t out = 0;
+    //curDmaBuf[i] = 0;
+    #define PWM_COMPARE(j) if(outputBuf[(i * 8) + (j)] > (uint8_t)pwmCounter) out |= 1 << (j)
+    PWM_COMPARE(0);
+    PWM_COMPARE(1);
+    PWM_COMPARE(2);
+    PWM_COMPARE(3);
+    PWM_COMPARE(4);
+    PWM_COMPARE(5);
+    PWM_COMPARE(6);
+    PWM_COMPARE(7);
+    
+    /*for(uint8_t j = 0; j < 8; j++) {
       if(outputBuf[(i * 8) + j] > (uint8_t)pwmCounter) {
-        dmaBufs[curDmaBuf][i] |= 1 << j;
+        out |= 1 << j;
       }
-    }
+    }*/
+    curDmaBuf[i] = out;
   }
 }
 
 void dataTransmittedHandler(DMA_HandleTypeDef *hdma) {
+  /* latch previously written data to LED output */
   HAL_GPIO_WritePin(PIN_LAT, 1);
 
   /* Stop timer */
   HAL_TIM_PWM_Stop(&htim4, TIM_CHANNEL_1);
-  __HAL_TIM_DISABLE(&htim4);
+  //__HAL_TIM_DISABLE(&htim4);
 
-  /* latch previously written data to LED output */
 
-  HAL_GPIO_WritePin(PIN_LAT, 0);
-
-  // generate new data
-  mapDmaBufPWM();
-  pwmCounter++;
-  if(pwmCounter >= (1 << PWM_RESOLUTION)) { // frame rendering finished
-    pwmCounter = 0;
-    mapFrameBuf(); // generate next frame
-  }
 
   /* Reconfigure DMA */
   //HAL_DMA_Abort(htim4.hdma[TIM_DMA_ID_CC1]);
-  if(HAL_DMA_Start_IT(htim4.hdma[TIM_DMA_ID_CC1], (uint32_t)dmaBufs[curDmaBuf], (uint32_t)&GPIOA->ODR, DMA_BUF_LENGTH) != HAL_OK) {
+  if(HAL_DMA_Start_IT(htim4.hdma[TIM_DMA_ID_CC1], (uint32_t)dmaBufs[curDmaBufIdx], (uint32_t)&GPIOA->ODR, DMA_BUF_LENGTH) != HAL_OK) {
     _Error_Handler(__FILE__, __LINE__);
   }
-  curDmaBuf = !curDmaBuf;
+  curDmaBufIdx = !curDmaBufIdx;
+  curDmaBuf = dmaBufs[curDmaBufIdx];
+  dmaTransferDone = true;
 
   /* Start timer for new data transmit */
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
-  __HAL_TIM_ENABLE(&htim4);
+  //__HAL_TIM_ENABLE(&htim4);
+  HAL_GPIO_WritePin(PIN_LAT, 0);
 }
 
 void transmitErrorHandler(DMA_HandleTypeDef *hdma) { 
@@ -217,23 +228,23 @@ int main(void)
   // direct writing to DMA buffer somehow works
   for (uint32_t i = 0; i < DMA_BUF_LENGTH; i++) {
     // uint8_t pattern = i % 4;
-    // dmaBufs[curDmaBuf][i] = ((pattern & 0xF) << 4)  | (pattern & 0xF);
+    // dmaBufs[curDmaBufIdx][i] = ((pattern & 0xF) << 4)  | (pattern & 0xF);
     dmaBufs[0][i] = 0;
     dmaBufs[1][i] = 0;
-    // dmaBufs[curDmaBuf][i] = 0xFF;
+    // dmaBufs[curDmaBufIdx][i] = 0xFF;
   }
-  dmaBufs[0][0] = 0xFF;
-  dmaBufs[1][0] = 0xFF;
 
   for(uint32_t i = 0; i < NUM_PIXELS; i++) {
     frameBuf[i] = 1 << (i % 32);
   }
+  frameBuf[0] = 0xFFFFFFFF;
+  frameBuf[3] = 0xFFFFFFFF;
   
   // but generating DMA buffer contents does not, even if correct bytes are within
   mapFrameBuf();
   mapDmaBufPWM();
   //HAL_DMA_Abort(htim4.hdma[TIM_DMA_ID_CC1]);
-  if(HAL_DMA_Start_IT(htim4.hdma[TIM_DMA_ID_CC1], (uint32_t)dmaBufs[curDmaBuf], (uint32_t)&GPIOA->ODR, DMA_BUF_LENGTH) != HAL_OK) {
+  if(HAL_DMA_Start_IT(htim4.hdma[TIM_DMA_ID_CC1], (uint32_t)dmaBufs[curDmaBufIdx], (uint32_t)&GPIOA->ODR, DMA_BUF_LENGTH) != HAL_OK) {
     _Error_Handler(__FILE__, __LINE__);
   }
   __HAL_TIM_ENABLE_DMA(&htim4, TIM_DMA_CC1);
@@ -255,13 +266,26 @@ int main(void)
 
   /* USER CODE BEGIN 3 */
 
+    if(dmaTransferDone) {
+      // generate new data
+      mapDmaBufPWM();
+      pwmCounter++;
+      if(pwmCounter >= (1 << PWM_RESOLUTION)) { // frame rendering finished
+        pwmCounter = 0;
+        mapFrameBuf(); // generate next frame
+      }
+
+      dmaTransferDone = false;
+    }
+
+
     HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
-    HAL_Delay(100);
+    //HAL_Delay(100);
     //for(uint16_t i = 0; i < NUM_PIXELS; i++) {
-      char msg[100];
-      //sprintf(msg, "%03d %08x %02x%02x%02x%02x %02x\n", pwmCounter, frameBuf[0], outputBuf[0], outputBuf[1], outputBuf[2], outputBuf[3], dmaBufs[curDmaBuf][0]);
-      sprintf(msg, "%02x", dmaBufs[curDmaBuf][0]);
-      HAL_UART_Transmit(&huart1, msg, strlen(msg), 1000);
+      // char msg[100];
+      //sprintf(msg, "%03d %08x %02x%02x%02x%02x %02x\n", pwmCounter, frameBuf[0], outputBuf[0], outputBuf[1], outputBuf[2], outputBuf[3], dmaBufs[curDmaBufIdx][0]);
+      // sprintf(msg, "%02x", dmaBufs[curDmaBufIdx][0]);
+      // HAL_UART_Transmit(&huart1, msg, strlen(msg), 1000);
     //}
   }
   /* USER CODE END 3 */
@@ -385,7 +409,7 @@ static void MX_TIM4_Init(void)
   TIM_OC_InitTypeDef sConfigOC;
 
   htim4.Instance = TIM4;
-  htim4.Init.Prescaler = 359;
+  htim4.Init.Prescaler = 35;
   htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim4.Init.Period = 1;
   htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
