@@ -64,7 +64,7 @@ PCD_HandleTypeDef hpcd_USB_FS;
 #define NUM_PIXELS    (PANEL_HEIGHT * PANEL_WIDTH)
 #define PWM_RESOLUTION     8
 
-#define DMA_BUF_LENGTH  (NUM_PIXELS / 2)
+#define DMA_BUF_LENGTH  ((NUM_PIXELS / 2) + 1)
 uint8_t dmaBuf1[DMA_BUF_LENGTH], dmaBuf2[DMA_BUF_LENGTH];
 uint8_t* dmaBufs[] = {dmaBuf1, dmaBuf2};
 uint8_t curDmaBuf = 0;
@@ -128,7 +128,7 @@ void mapFrameBuf() {
 }
 
 void mapDmaBufPWM() {
-  for(uint16_t i = 0; i < (NUM_PIXELS / 8); i++) {
+  for(uint16_t i = 0; i < (NUM_PIXELS / 2); i++) {
     dmaBufs[curDmaBuf][i] = 0;
     for(uint8_t j = 0; j < 8; j++) {
       if(outputBuf[(i * 8) + j] > (uint8_t)pwmCounter) {
@@ -150,9 +150,9 @@ void dataTransmittedHandler(DMA_HandleTypeDef *hdma) {
   HAL_GPIO_WritePin(PIN_LAT, 0);
 
   // generate new data
-  pwmCounter++;
   mapDmaBufPWM();
-  if(pwmCounter >= (1 << PWM_RESOLUTION) - 1) { // frame rendering finished
+  pwmCounter++;
+  if(pwmCounter >= (1 << PWM_RESOLUTION)) { // frame rendering finished
     pwmCounter = 0;
     mapFrameBuf(); // generate next frame
   }
@@ -226,13 +226,8 @@ int main(void)
   dmaBufs[1][0] = 0xFF;
 
   for(uint32_t i = 0; i < NUM_PIXELS; i++) {
-    // frameBuf[i] = 1 << (i % 32);
+    frameBuf[i] = 1 << (i % 32);
   }
-
-  frameBuf[1] = 0xFF804020; //this works, but off by one
-  frameBuf[3] = 0xFF804020; //this works, but off by one
-  frameBuf[10] = 0xFF804020; //this doesn't
-  frameBuf[20] = 0xFF804020; //this too
   
   // but generating DMA buffer contents does not, even if correct bytes are within
   mapFrameBuf();
