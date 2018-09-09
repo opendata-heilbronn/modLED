@@ -36,7 +36,8 @@
 #include "stm32f1xx_it.h"
 
 /* USER CODE BEGIN 0 */
-
+#include "globals.h"
+extern TIM_HandleTypeDef htim3;
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
@@ -214,7 +215,12 @@ void TIM1_UP_IRQHandler(void)
 {
   /* USER CODE BEGIN TIM1_UP_IRQn 0 */
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, 1);
+  __HAL_TIM_SET_COMPARE(&PWM_TIMER, PWM_CHANNEL, gammaTable[pwmStepIdx << 2]);
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, 0);
+  pwmStepIdx++;
+  if(pwmStepIdx >= 64)
+    pwmStepIdx = 0;
+
 
   /* USER CODE END TIM1_UP_IRQn 0 */
   HAL_TIM_IRQHandler(&htim1);

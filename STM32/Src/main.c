@@ -41,10 +41,16 @@
 #include "stm32f1xx_hal.h"
 
 /* USER CODE BEGIN Includes */
+
+// TODO: Gamma second implementation (full brightness, no global dimming), serial data receive
+// Maybe USB to Serial on-board? dunno, probably too complicated
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <math.h>
+#include "globals.h"
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
@@ -58,23 +64,6 @@ PCD_HandleTypeDef hpcd_USB_FS;
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
-#define DMA_TIMER htim1
-
-
-#define PIN_OE  GPIOB, GPIO_PIN_4
-#define PIN_LAT GPIOB, GPIO_PIN_5
-
-#define PANEL_HEIGHT  8
-#define PANEL_WIDTH   16
-#define NUM_PIXELS    (PANEL_HEIGHT * PANEL_WIDTH)
-#define PWM_RESOLUTION     6
-
-#define DMA_BUF_LENGTH  ((NUM_PIXELS/2) * (1 << PWM_RESOLUTION))
-uint8_t dmaBuf[DMA_BUF_LENGTH]; // buffer for the raw data to be shifted out per frame
-
-// color mapping: [r1, r2, g, b]
-uint32_t frameBuf[NUM_PIXELS];
-
 
 /* USER CODE END PV */
 
@@ -97,6 +86,14 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 
 /* USER CODE BEGIN 0 */
 
+void setGlobalBrightness(uint8_t brightness) {
+  globalBrightness = brightness;
+  float brightnessFactor = (float)brightness / 255.0;
+  for(int16_t i = 0; i < GAMMA_STEPS; i++) {
+    float step = (float)i * brightnessFactor;
+    gammaTable[i] = (uint8_t)(pow(step / (GAMMA_STEPS - 1), GAMMA_CORRECTION) * (GAMMA_STEPS - 1)); // Gamma function: pow(i/255, 2.2) * 255
+  }
+}
 
 void mapFrameBuf() {
   for(uint16_t pwmStep = 0; pwmStep < (1 << PWM_RESOLUTION); pwmStep++) {
@@ -128,7 +125,7 @@ void mapFrameBuf() {
 }
 
 void dataTransmittedHandler(DMA_HandleTypeDef *hdma) {
-
+  pwmStepIdx = 0;
 }
 
 void transmitErrorHandler(DMA_HandleTypeDef *hdma) { 
@@ -172,9 +169,7 @@ int main(void)
   MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
 
-  DMA_TIMER.hdma[TIM_DMA_ID_CC1]->XferCpltCallback = dataTransmittedHandler;
-  DMA_TIMER.hdma[TIM_DMA_ID_CC1]->XferErrorCallback = transmitErrorHandler;
-  
+  pwmStepIdx = 0;
 
   for (uint32_t i = 0; i < DMA_BUF_LENGTH; i++) {
     dmaBuf[i] = 0;
@@ -184,10 +179,15 @@ int main(void)
     //generate test pattern of increasing brightness
     uint8_t c = i * 2;
     frameBuf[i] = c << 24 | c << 16 | c << 8 | c;
+    //frameBuf[i] = 0xFFFFFFFF;
   }
   
+  setGlobalBrightness(INITAL_BRIGHTNESS);
   //initial framebuffer to DMA buffer mapping
   mapFrameBuf();
+
+  DMA_TIMER.hdma[TIM_DMA_ID_CC1]->XferCpltCallback = dataTransmittedHandler;
+  DMA_TIMER.hdma[TIM_DMA_ID_CC1]->XferErrorCallback = transmitErrorHandler;
 
   if(HAL_DMA_Start_IT(DMA_TIMER.hdma[TIM_DMA_ID_CC1], (uint32_t)&dmaBuf, (uint32_t)&GPIOA->ODR, DMA_BUF_LENGTH) != HAL_OK) {
     _Error_Handler(__FILE__, __LINE__);
@@ -195,10 +195,10 @@ int main(void)
   __HAL_TIM_ENABLE_DMA(&DMA_TIMER, TIM_DMA_CC1);
   __HAL_TIM_ENABLE_IT(&DMA_TIMER, TIM_IT_UPDATE);
   __HAL_TIM_ENABLE(&DMA_TIMER);
-  HAL_TIM_PWM_Start(&DMA_TIMER, TIM_CHANNEL_1);
+  HAL_TIM_PWM_Start(&DMA_TIMER, DMA_CHANNEL);
 
-  __HAL_TIM_ENABLE(&htim3);
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
+  __HAL_TIM_ENABLE(&PWM_TIMER);
+  HAL_TIM_PWM_Start(&PWM_TIMER, PWM_CHANNEL);
 
   HAL_GPIO_WritePin(PIN_OE, 0);
 
@@ -364,7 +364,7 @@ static void MX_TIM3_Init(void)
   htim3.Instance = TIM3;
   htim3.Init.Prescaler = 0;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim3.Init.Period = 1023;
+  htim3.Init.Period = 255;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
@@ -391,7 +391,7 @@ static void MX_TIM3_Init(void)
   }
 
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 16;
+  sConfigOC.Pulse = 0;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_LOW;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
