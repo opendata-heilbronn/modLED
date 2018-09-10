@@ -42,7 +42,7 @@
 
 /* USER CODE BEGIN Includes */
 
-// TODO: Gamma second implementation (full brightness, no global dimming) , serial data receive
+// TODO: Gamma second implementation (full brightness, no global dimming)
 // Maybe USB to Serial on-board? dunno, probably too complicated
 
 #include <stdio.h>
@@ -242,7 +242,7 @@ int main(void)
   /* USER CODE END WHILE */
 
   /* USER CODE BEGIN 3 */
-  HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+  HAL_GPIO_TogglePin(PIN_LED);
 
   //generate test pattern
   /*frameBuf[pixelPos % NUM_PIXELS] = 0;
@@ -482,7 +482,7 @@ static void MX_DMA_Init(void)
   HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
   /* DMA1_Channel5_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 1, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel5_IRQn);
 
 }
