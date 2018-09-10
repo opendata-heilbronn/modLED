@@ -42,7 +42,7 @@
 
 /* USER CODE BEGIN Includes */
 
-// TODO: Gamma second implementation (full brightness, no global dimming), serial data receive
+// TODO: Gamma second implementation (full brightness, no global dimming) , serial data receive
 // Maybe USB to Serial on-board? dunno, probably too complicated
 
 #include <stdio.h>
@@ -59,6 +59,7 @@ TIM_HandleTypeDef htim3;
 DMA_HandleTypeDef hdma_tim1_ch1;
 
 UART_HandleTypeDef huart1;
+DMA_HandleTypeDef hdma_usart1_rx;
 
 PCD_HandleTypeDef hpcd_USB_FS;
 
@@ -124,6 +125,32 @@ void mapFrameBuf() {
   }
 }
 
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef* huart) {
+  if(huart == &RX_UART) {
+    for(uint8_t i = 0; i < UART_BUFFER_LENGTH; i++) {
+      if(uartRxCounter == 0) { // packet preamble
+        if(uartBuffer[i] != UART_PROTOCOL_INIT) { //when received packet does not match preamble
+          uartRxCounter--; // wait for next
+        }
+      }
+      else {
+        uint16_t byteId = (uartRxCounter - 1);
+        uint8_t val = uartBuffer[i];
+        switch(byteId % 3) {
+          case 0: frameBuf[byteId / 3] &= 0x0000FFFF; frameBuf[byteId / 3] |= (val << 24 | val << 16); break;
+          case 1: frameBuf[byteId / 3] &= 0xFFFF00FF; frameBuf[byteId / 3] |= val << 8; break;
+          case 2: frameBuf[byteId / 3] &= 0xFFFFFF00; frameBuf[byteId / 3] |= val; break;
+        }
+      }
+
+      uartRxCounter++;
+      if(uartRxCounter >= (NUM_PIXELS * 3) + 1)
+        uartRxCounter = 0;
+    }
+  }
+}
+
+
 void dataTransmittedHandler(DMA_HandleTypeDef *hdma) {
   pwmStepIdx = 0;
 }
@@ -170,6 +197,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   pwmStepIdx = 0;
+  uartRxCounter = 0;
 
   for (uint32_t i = 0; i < DMA_BUF_LENGTH; i++) {
     dmaBuf[i] = 0;
@@ -200,9 +228,10 @@ int main(void)
   __HAL_TIM_ENABLE(&PWM_TIMER);
   HAL_TIM_PWM_Start(&PWM_TIMER, PWM_CHANNEL);
 
+  HAL_UART_Receive_DMA(&RX_UART, uartBuffer, UART_BUFFER_LENGTH);
+
   HAL_GPIO_WritePin(PIN_OE, 0);
 
-  uint8_t pixelPos = 0;
 
   /* USER CODE END 2 */
 
@@ -408,7 +437,7 @@ static void MX_USART1_UART_Init(void)
 {
 
   huart1.Instance = USART1;
-  huart1.Init.BaudRate = 115200;
+  huart1.Init.BaudRate = RX_BAUD;
   huart1.Init.WordLength = UART_WORDLENGTH_8B;
   huart1.Init.StopBits = UART_STOPBITS_1;
   huart1.Init.Parity = UART_PARITY_NONE;
@@ -452,6 +481,9 @@ static void MX_DMA_Init(void)
   /* DMA1_Channel2_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
+  /* DMA1_Channel5_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel5_IRQn);
 
 }
 
