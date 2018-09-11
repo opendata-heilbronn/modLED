@@ -42,7 +42,12 @@
 
 /* USER CODE BEGIN Includes */
 
-// TODO: Gamma second implementation (full brightness, no global dimming)
+// TODO:
+// Fix last Pixel dimly glowing
+//    Adding dead-time should help 
+// Gamma second implementation (full brightness, no global dimming.) 
+//    Either by modifying PWM values, but would be losing resolution
+//    Or by selecting the next PWM step to show by gamma (would mean rewrite of the current DMA logic)
 // Maybe USB to Serial on-board? dunno, probably too complicated
 
 #include <stdio.h>
