@@ -66,8 +66,6 @@ DMA_HandleTypeDef hdma_tim1_ch1;
 UART_HandleTypeDef huart1;
 DMA_HandleTypeDef hdma_usart1_rx;
 
-PCD_HandleTypeDef hpcd_USB_FS;
-
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
 
@@ -77,7 +75,6 @@ PCD_HandleTypeDef hpcd_USB_FS;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
-static void MX_USB_PCD_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_TIM1_Init(void);                                    
@@ -195,7 +192,6 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_DMA_Init();
-  MX_USB_PCD_Init();
   MX_USART1_UART_Init();
   MX_TIM3_Init();
   MX_TIM1_Init();
@@ -271,7 +267,6 @@ void SystemClock_Config(void)
 
   RCC_OscInitTypeDef RCC_OscInitStruct;
   RCC_ClkInitTypeDef RCC_ClkInitStruct;
-  RCC_PeriphCLKInitTypeDef PeriphClkInit;
 
     /**Initializes the CPU, AHB and APB busses clocks 
     */
@@ -297,13 +292,6 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
   if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
-  {
-    _Error_Handler(__FILE__, __LINE__);
-  }
-
-  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USB;
-  PeriphClkInit.UsbClockSelection = RCC_USBCLKSOURCE_PLL_DIV1_5;
-  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
@@ -450,24 +438,6 @@ static void MX_USART1_UART_Init(void)
   huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
   huart1.Init.OverSampling = UART_OVERSAMPLING_16;
   if (HAL_UART_Init(&huart1) != HAL_OK)
-  {
-    _Error_Handler(__FILE__, __LINE__);
-  }
-
-}
-
-/* USB init function */
-static void MX_USB_PCD_Init(void)
-{
-
-  hpcd_USB_FS.Instance = USB;
-  hpcd_USB_FS.Init.dev_endpoints = 8;
-  hpcd_USB_FS.Init.speed = PCD_SPEED_FULL;
-  hpcd_USB_FS.Init.ep0_mps = DEP0CTL_MPS_8;
-  hpcd_USB_FS.Init.low_power_enable = DISABLE;
-  hpcd_USB_FS.Init.lpm_enable = DISABLE;
-  hpcd_USB_FS.Init.battery_charging_enable = DISABLE;
-  if (HAL_PCD_Init(&hpcd_USB_FS) != HAL_OK)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
