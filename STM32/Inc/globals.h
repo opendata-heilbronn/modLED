@@ -1,9 +1,11 @@
 #pragma once
 
-#define DMA_TIMER   htim1
-#define DMA_CHANNEL TIM_CHANNEL_1
-#define PWM_TIMER   htim3
-#define PWM_CHANNEL TIM_CHANNEL_1
+#define DMA_TIMER       htim1
+#define DMA_CHANNEL     TIM_CHANNEL_1
+#define PWM_TIMER       htim3
+#define PWM_CHANNEL     TIM_CHANNEL_1
+#define LATCH_TIMER     htim2
+#define LATCH_CHANNEL   TIM_CHANNEL_1
 
 
 #define PIN_OE  GPIOB, GPIO_PIN_4
@@ -23,7 +25,7 @@ uint32_t frameBuf[NUM_PIXELS];
 
 #define RX_UART             huart1
 #define RX_UART_DMA         hdma_usart1_rx
-#define RX_BAUD             500000
+#define RX_BAUD             1250000
 #define UART_BUFFER_LENGTH  16
 #define UART_PROTOCOL_INIT  1
 uint8_t uartBuffer[UART_BUFFER_LENGTH];
