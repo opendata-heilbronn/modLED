@@ -43,6 +43,9 @@
 /* USER CODE BEGIN Includes */
 
 // TODO:
+// Rebuild data shift out by sending each DMA frame individually again
+//    Timer in One-Shot mode and repetition counter might do the trick
+//    Have next Frame to send out already ready and swap buffer adresses
 // Fix last Pixel dimly glowing
 //    Adding dead-time should help 
 // Gamma second implementation (full brightness, no global dimming.) 
@@ -98,10 +101,33 @@ void setGlobalBrightness(uint8_t brightness) {
   }
 }
 
+void mapOutputBuf() {
+  for(uint16_t i = 0; i < (NUM_PIXELS / 2); i++) {
+    uint8_t out = 0;
+    //curDmaBuf[i] = 0;
+    #define PWM_COMPARE(j) if(outputBuf[(i * 8) + (j)] > (uint8_t)pwmStepIdx) out |= 1 << (j)
+    PWM_COMPARE(0);
+    PWM_COMPARE(1);
+    PWM_COMPARE(2);
+    PWM_COMPARE(3);
+    PWM_COMPARE(4);
+    PWM_COMPARE(5);
+    PWM_COMPARE(6);
+    PWM_COMPARE(7);
+    
+    /*for(uint8_t j = 0; j < 8; j++) {
+      if(outputBuf[(i * 8) + j] > (uint8_t)pwmCounter) {
+        out |= 1 << j;
+      }
+    }*/
+    curDmaBuf[i] = out;
+  }
+}
+
 void mapFrameBuf() {
-  for(uint16_t pwmStep = 0; pwmStep < (1 << PWM_RESOLUTION); pwmStep++) {
-    uint16_t pwmIndex = pwmStep * (1 << PWM_RESOLUTION);
-    uint8_t pwmCompare = pwmStep << (8 - PWM_RESOLUTION);
+  //for(uint16_t pwmStep = 0; pwmStep < (1 << PWM_RESOLUTION); pwmStep++) {
+    //uint16_t pwmIndex = pwmStep * (1 << PWM_RESOLUTION);
+    /*uint8_t pwmCompare = pwmStepIdx << (8 - PWM_RESOLUTION);
     for(uint16_t y = 0; y < PANEL_HEIGHT; y++) {
       uint16_t rowIndex = y * PANEL_WIDTH;
       for(uint16_t x = 0; x < PANEL_WIDTH; x++) {
@@ -116,15 +142,35 @@ void mapFrameBuf() {
         for(uint8_t colorIdx = 0; colorIdx < 4; colorIdx++) {
 
           if(((pixelColor >> ((8 * colorIdx))) & 0xFF) > pwmCompare) {
-            dmaBuf[pwmIndex + matrixIndex] |= 1 << (half * 4 + (3 - colorIdx));
+            curDmaBuf[matrixIndex] |= 1 << (half * 4 + (3 - colorIdx));
           }
           else {
-            dmaBuf[pwmIndex + matrixIndex] &= ~(1 << (half * 4 + (3 - colorIdx)));
+            curDmaBuf[matrixIndex] &= ~(1 << (half * 4 + (3 - colorIdx)));
           }
         }
       }
+    }*/
+  //}
+
+  for(uint16_t y = 0; y < PANEL_HEIGHT; y++) {
+    uint16_t rowIndex = y * PANEL_WIDTH;
+    for(uint16_t x = 0; x < PANEL_WIDTH; x++) {
+      uint16_t pixelIndex = rowIndex + x;
+      uint32_t pixelColor = frameBuf[pixelIndex];
+
+      // does not differentiate between upper and lower half
+      uint16_t matrixIndex = ((x / 4) * 16) + ((y % 4) * 4) + (x % 4); 
+
+      bool half = (y / 4); // 0 = upper half, 1 = lower half
+
+      for(uint8_t c = 0; c < 4; c++) {
+        outputBuf[matrixIndex * 8 + half * 4 + (3 - c)] = (pixelColor >> (8 * c)) & 0xFF;
+      }
+      /*for(uint8_t i = 0; i < 4; i++) {
+        outBuf[half * 4 + i] = pixelColor & ((0xFF) << (8 * i));
+      }*/
     }
-  }
+}
 }
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef* huart) {
@@ -154,7 +200,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef* huart) {
 
 
 void dataTransmittedHandler(DMA_HandleTypeDef *hdma) {
-  pwmStepIdx = 0;
+  //pwmStepIdx = 0;
 }
 
 void transmitErrorHandler(DMA_HandleTypeDef *hdma) { 
@@ -200,15 +246,21 @@ int main(void)
   pwmStepIdx = 0;
   uartRxCounter = 0;
 
+  dmaBufs[0] = dmaBuf1;
+  dmaBufs[1] = dmaBuf2;
+  curDmaBufIdx = 0;
+  curDmaBuf = dmaBuf1;
+
   for (uint32_t i = 0; i < DMA_BUF_LENGTH; i++) {
-    dmaBuf[i] = 0;
+    dmaBuf1[i] = 0;
+    dmaBuf2[i] = 0;
   }
 
   for(uint32_t i = 0; i < NUM_PIXELS; i++) {
     //generate test pattern of increasing brightness
     uint8_t c = i * 2;
     frameBuf[i] = c << 24 | c << 16 | c << 8 | c;
-    //frameBuf[i] = 0xFFFFFFFF;
+    // frameBuf[i] = 0xFFFFFFFF;
   }
   
   setGlobalBrightness(INITAL_BRIGHTNESS);
@@ -218,7 +270,7 @@ int main(void)
   DMA_TIMER.hdma[TIM_DMA_ID_CC1]->XferCpltCallback = dataTransmittedHandler;
   DMA_TIMER.hdma[TIM_DMA_ID_CC1]->XferErrorCallback = transmitErrorHandler;
 
-  if(HAL_DMA_Start_IT(DMA_TIMER.hdma[TIM_DMA_ID_CC1], (uint32_t)&dmaBuf, (uint32_t)&GPIOA->ODR, DMA_BUF_LENGTH) != HAL_OK) {
+  if(HAL_DMA_Start_IT(DMA_TIMER.hdma[TIM_DMA_ID_CC1], (uint32_t)&curDmaBuf, (uint32_t)&GPIOA->ODR, DMA_BUF_LENGTH) != HAL_OK) {
     _Error_Handler(__FILE__, __LINE__);
   }
   __HAL_TIM_ENABLE_DMA(&DMA_TIMER, TIM_DMA_CC1);
@@ -318,12 +370,12 @@ static void MX_TIM1_Init(void)
   TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig;
 
   htim1.Instance = TIM1;
-  htim1.Init.Prescaler = 71;
+  htim1.Init.Prescaler = 35;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim1.Init.Period = 1;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 63;
-  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
   {
     _Error_Handler(__FILE__, __LINE__);
@@ -336,6 +388,11 @@ static void MX_TIM1_Init(void)
   }
 
   if (HAL_TIM_PWM_Init(&htim1) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+  if (HAL_TIM_OnePulse_Init(&htim1, TIM_OPMODE_SINGLE) != HAL_OK)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
@@ -457,7 +514,7 @@ static void MX_DMA_Init(void)
   HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
   /* DMA1_Channel5_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 1, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel5_IRQn);
 
 }

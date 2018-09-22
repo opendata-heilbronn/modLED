@@ -57,6 +57,8 @@
 /* #define USE_FULL_ASSERT    1U */
 
 /* USER CODE BEGIN Private defines */
+void mapFrameBuf();
+void mapOutputBuf();
 
 /* USER CODE END Private defines */
 

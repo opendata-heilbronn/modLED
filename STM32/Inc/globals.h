@@ -15,8 +15,13 @@
 #define NUM_PIXELS      (PANEL_HEIGHT * PANEL_WIDTH)
 #define PWM_RESOLUTION  6
 
-#define DMA_BUF_LENGTH  ((NUM_PIXELS/2) * (1 << PWM_RESOLUTION))
-uint8_t dmaBuf[DMA_BUF_LENGTH]; // buffer for the raw data to be shifted out per frame
+#define DMA_BUF_LENGTH  (NUM_PIXELS/2)
+uint8_t dmaBuf1[DMA_BUF_LENGTH], dmaBuf2[DMA_BUF_LENGTH]; // buffers for the raw data to be shifted out per frame
+uint8_t* dmaBufs[2];
+uint8_t* curDmaBuf;
+uint8_t curDmaBufIdx;
+
+uint8_t outputBuf[NUM_PIXELS * 4];
 
 // color mapping: [r1, r2, g, b]
 uint32_t frameBuf[NUM_PIXELS];

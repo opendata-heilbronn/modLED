@@ -36,6 +36,7 @@
 #include "stm32f1xx_it.h"
 
 /* USER CODE BEGIN 0 */
+#include "main.h"
 #include "globals.h"
 extern TIM_HandleTypeDef htim3;
 /* USER CODE END 0 */
@@ -236,10 +237,24 @@ void TIM1_UP_IRQHandler(void)
   if(pwmStepIdx >= 64)
     pwmStepIdx = 0;
 
-
   /* USER CODE END TIM1_UP_IRQn 0 */
   HAL_TIM_IRQHandler(&htim1);
   /* USER CODE BEGIN TIM1_UP_IRQn 1 */
+  
+  // if(HAL_DMA_Start_IT(DMA_TIMER.hdma[TIM_DMA_ID_CC1], (uint32_t)&curDmaBuf, (uint32_t)&GPIOA->ODR, DMA_BUF_LENGTH) != HAL_OK) {
+  //   _Error_Handler(__FILE__, __LINE__);
+  // }
+  HAL_DMA_Abort_IT(DMA_TIMER.hdma[TIM_DMA_ID_CC1]);
+  while(HAL_DMA_Start_IT(DMA_TIMER.hdma[TIM_DMA_ID_CC1], (uint32_t)curDmaBuf, (uint32_t)&GPIOA->ODR, DMA_BUF_LENGTH) != HAL_OK) {
+    HAL_GPIO_TogglePin(PIN_LED);
+  }
+  //DMA_TIMER.hdma[TIM_DMA_ID_CC1]->Instance->CMAR = (uint32_t)&curDmaBuf;
+  HAL_TIM_PWM_Start(&DMA_TIMER, DMA_CHANNEL);
+
+  //bufferSwap
+  curDmaBufIdx = !curDmaBufIdx;
+  curDmaBuf = dmaBufs[curDmaBufIdx];
+  mapOutputBuf();
 
   /* USER CODE END TIM1_UP_IRQn 1 */
 }
