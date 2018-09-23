@@ -219,8 +219,6 @@ int main(void)
   //initial framebuffer to DMA buffer mapping
   mapFrameBuf();
   
-  __HAL_TIM_ENABLE(&LATCH_TIMER);
-  // HAL_TIM_PWM_Start(&LATCH_TIMER, LATCH_CHANNEL);
 
   DMA_TIMER.hdma[TIM_DMA_ID_CC1]->XferCpltCallback = dataTransmittedHandler;
   DMA_TIMER.hdma[TIM_DMA_ID_CC1]->XferErrorCallback = transmitErrorHandler;
@@ -230,12 +228,10 @@ int main(void)
   }
   __HAL_TIM_ENABLE_DMA(&DMA_TIMER, TIM_DMA_CC1);
   __HAL_TIM_ENABLE_IT(&DMA_TIMER, TIM_IT_UPDATE);
-  
-  __HAL_TIM_ENABLE(&DMA_TIMER);
-  HAL_TIM_PWM_Start(&DMA_TIMER, DMA_CHANNEL);
-  
 
-  __HAL_TIM_ENABLE(&PWM_TIMER);
+  HAL_TIM_PWM_Start(&DMA_TIMER, DMA_CHANNEL);
+  HAL_TIM_PWM_Start(&LATCH_TIMER, LATCH_CHANNEL);
+  
   HAL_TIM_PWM_Start(&PWM_TIMER, PWM_CHANNEL);
 
   HAL_UART_Receive_DMA(&RX_UART, uartBuffer, UART_BUFFER_LENGTH);
@@ -430,8 +426,8 @@ static void MX_TIM2_Init(void)
   }
 
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 127;
-  sConfigOC.OCPolarity = TIM_OCPOLARITY_LOW;
+  sConfigOC.Pulse = 1;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
   {
