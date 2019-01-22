@@ -160,10 +160,10 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef* huart) {
 void startDMA() {
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, 1);
 
-  uint32_t* dmaBufPos = (uint32_t *)&dmaBuf + (pwmStepIdx * (NUM_PIXELS / 2));
+  uint32_t dmaBufPos = (uint32_t)dmaBuf + (pwmStepIdx * (NUM_PIXELS / 2));
 
-  
-  if(HAL_DMA_Start_IT(DMA_TIMER.hdma[TIM_DMA_ID_CC1], (uint32_t)dmaBufPos, (uint32_t)&GPIOA->ODR, (NUM_PIXELS / 2)) != HAL_OK) {
+
+  if(HAL_DMA_Start_IT(DMA_TIMER.hdma[TIM_DMA_ID_CC1], dmaBufPos, (uint32_t)&GPIOA->ODR, (NUM_PIXELS / 2)) != HAL_OK) {
     _Error_Handler(__FILE__, __LINE__);
   }
 
