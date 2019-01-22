@@ -10,7 +10,7 @@
   * inserted by the user or by software development tools
   * are owned by their respective copyright owners.
   *
-  * COPYRIGHT(c) 2018 STMicroelectronics
+  * COPYRIGHT(c) 2019 STMicroelectronics
   *
   * Redistribution and use in source and binary forms, with or without modification,
   * are permitted provided that the following conditions are met:
@@ -97,14 +97,15 @@ void setGlobalBrightness(uint8_t brightness) {
   float brightnessFactor = (float)brightness / 255.0;
   for(int16_t i = 0; i < GAMMA_STEPS; i++) {
     float step = (float)i * brightnessFactor;
-    gammaTable[i] = (uint8_t)(pow(step / (GAMMA_STEPS - 1), GAMMA_CORRECTION) * (GAMMA_STEPS - 1)); // Gamma function: pow(i/255, 2.2) * 255
+    //gammaTable[i] = (uint8_t)(pow(step / (GAMMA_STEPS - 1), GAMMA_CORRECTION) * (GAMMA_STEPS - 1)); // Gamma function: pow(i/255, 2.2) * 255
+    gammaTable[i] = 255;
   }
 }
 
 void mapFrameBuf() {
-  for(uint16_t pwmStep = 0; pwmStep < (1 << PWM_RESOLUTION); pwmStep++) {
-    uint16_t pwmIndex = pwmStep * (1 << PWM_RESOLUTION);
-    uint8_t pwmCompare = pwmStep << (8 - PWM_RESOLUTION);
+  for(uint16_t pwmStep = 0; pwmStep < PWM_RESOLUTION; pwmStep++) {
+    uint16_t pwmIndex = pwmStep * NUM_PIXELS / 2;
+    //uint8_t pwmCompare = pwmStep << (8 - PWM_RESOLUTION);
     for(uint16_t y = 0; y < PANEL_HEIGHT; y++) {
       uint16_t rowIndex = y * PANEL_WIDTH;
       for(uint16_t x = 0; x < PANEL_WIDTH; x++) {
@@ -117,8 +118,9 @@ void mapFrameBuf() {
         bool half = (y / 4) % 2; // 0 = upper half, 1 = lower half
 
         for(uint8_t colorIdx = 0; colorIdx < 4; colorIdx++) {
+          //only works for 8 bit PWM currently, ToDo: gamma & dynamic bit resolution
 
-          if(((pixelColor >> ((8 * colorIdx))) & 0xFF) > pwmCompare) {
+          if(((pixelColor >> ((8 * colorIdx))) & 0xFF) & (1 << pwmStep)) {
             dmaBuf[pwmIndex + matrixIndex] |= 1 << (half * 4 + (3 - colorIdx));
           }
           else {
@@ -155,14 +157,41 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef* huart) {
   }
 }
 
+void startDMA() {
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, 1);
+
+  uint32_t* dmaBufPos = (uint32_t *)&dmaBuf + (pwmStepIdx * (NUM_PIXELS / 2));
+
+  
+  if(HAL_DMA_Start_IT(DMA_TIMER.hdma[TIM_DMA_ID_CC1], (uint32_t)dmaBufPos, (uint32_t)&GPIOA->ODR, (NUM_PIXELS / 2)) != HAL_OK) {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+  uint16_t prescaler = (MIN_PWM_PRESCALER << pwmStepIdx) - 1;
+  __HAL_TIM_SET_PRESCALER(&DMA_TIMER, prescaler);
+  __HAL_TIM_SET_PRESCALER(&LATCH_TIMER, prescaler);
+
+
+  if(HAL_TIM_PWM_Start(&DMA_TIMER, DMA_CHANNEL) != HAL_OK) {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+  HAL_TIM_PWM_Start(&LATCH_TIMER, LATCH_CHANNEL);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, 0);
+}
+
 
 void dataTransmittedHandler(DMA_HandleTypeDef *hdma) {
-  pwmStepIdx = 0;
+  //pwmStepIdx = 0;
 }
 
 void transmitErrorHandler(DMA_HandleTypeDef *hdma) { 
   __HAL_TIM_DISABLE(&DMA_TIMER); 
 }
+
+void ISR_TIM2() {
+
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -223,14 +252,12 @@ int main(void)
   DMA_TIMER.hdma[TIM_DMA_ID_CC1]->XferCpltCallback = dataTransmittedHandler;
   DMA_TIMER.hdma[TIM_DMA_ID_CC1]->XferErrorCallback = transmitErrorHandler;
 
-  if(HAL_DMA_Start_IT(DMA_TIMER.hdma[TIM_DMA_ID_CC1], (uint32_t)&dmaBuf, (uint32_t)&GPIOA->ODR, DMA_BUF_LENGTH) != HAL_OK) {
-    _Error_Handler(__FILE__, __LINE__);
-  }
   __HAL_TIM_ENABLE_DMA(&DMA_TIMER, TIM_DMA_CC1);
   __HAL_TIM_ENABLE_IT(&DMA_TIMER, TIM_IT_UPDATE);
-
-  HAL_TIM_PWM_Start(&DMA_TIMER, DMA_CHANNEL);
-  HAL_TIM_PWM_Start(&LATCH_TIMER, LATCH_CHANNEL);
+  
+  startDMA();
+  // HAL_TIM_PWM_Start(&DMA_TIMER, DMA_CHANNEL);
+  // HAL_TIM_PWM_Start(&LATCH_TIMER, LATCH_CHANNEL);
   
   HAL_TIM_PWM_Start(&PWM_TIMER, PWM_CHANNEL);
 
@@ -323,11 +350,11 @@ static void MX_TIM1_Init(void)
   TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig;
 
   htim1.Instance = TIM1;
-  htim1.Init.Prescaler = 35;
+  htim1.Init.Prescaler = (MIN_PWM_PRESCALER - 1);
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim1.Init.Period = 1;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim1.Init.RepetitionCounter = 63;
+  htim1.Init.RepetitionCounter = ((NUM_PIXELS / 2 ) - 1);
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
   {
@@ -341,6 +368,11 @@ static void MX_TIM1_Init(void)
   }
 
   if (HAL_TIM_PWM_Init(&htim1) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+  if (HAL_TIM_OnePulse_Init(&htim1, TIM_OPMODE_SINGLE) != HAL_OK)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
@@ -390,9 +422,9 @@ static void MX_TIM2_Init(void)
   TIM_OC_InitTypeDef sConfigOC;
 
   htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 35;
+  htim2.Init.Prescaler = (MIN_PWM_PRESCALER - 1);
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 127;
+  htim2.Init.Period = (NUM_PIXELS - 1);
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
@@ -407,6 +439,11 @@ static void MX_TIM2_Init(void)
   }
 
   if (HAL_TIM_PWM_Init(&htim2) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+  if (HAL_TIM_OnePulse_Init(&htim2, TIM_OPMODE_SINGLE) != HAL_OK)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
