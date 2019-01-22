@@ -92,39 +92,46 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 
 /* USER CODE BEGIN 0 */
 
+//gamma generation playground: https://ideone.com/4WlJxv
 void setGlobalBrightness(uint8_t brightness) {
   globalBrightness = brightness;
   float brightnessFactor = (float)brightness / 255.0;
   for(int16_t i = 0; i < GAMMA_STEPS; i++) {
+    uint16_t maxVal = (1 << PWM_RESOLUTION) - 1;
     float step = (float)i * brightnessFactor;
-    //gammaTable[i] = (uint8_t)(pow(step / (GAMMA_STEPS - 1), GAMMA_CORRECTION) * (GAMMA_STEPS - 1)); // Gamma function: pow(i/255, 2.2) * 255
-    gammaTable[i] = 255;
+    step *= (float)maxVal / 255.0;
+    step = round(step);
+
+    gammaTable[i] = (uint16_t)(pow(step / maxVal, GAMMA_CORRECTION) * maxVal); 
+    // gammaTable[i] = 255;
   }
 }
 
 void mapFrameBuf() {
-  for(uint16_t pwmStep = 0; pwmStep < PWM_RESOLUTION; pwmStep++) {
-    uint16_t pwmIndex = pwmStep * NUM_PIXELS / 2;
-    //uint8_t pwmCompare = pwmStep << (8 - PWM_RESOLUTION);
-    for(uint16_t y = 0; y < PANEL_HEIGHT; y++) {
-      uint16_t rowIndex = y * PANEL_WIDTH;
-      for(uint16_t x = 0; x < PANEL_WIDTH; x++) {
-        uint16_t pixelIndex = rowIndex + x;
-        uint32_t pixelColor = frameBuf[pixelIndex];
+  for(uint16_t y = 0; y < PANEL_HEIGHT; y++) {
+    uint16_t rowIndex = y * PANEL_WIDTH;
+    for(uint16_t x = 0; x < PANEL_WIDTH; x++) {
+      uint16_t pixelIndex = rowIndex + x;
+      uint32_t pixelColor = frameBuf[pixelIndex];
 
-        // does not differentiate between upper and lower half
-        uint16_t matrixIndex = ((x / 4) * 16) + ((y % 4) * 4) + (x % 4); 
+      // does not differentiate between upper and lower half
+      uint16_t matrixIndex = ((x / 4) * 16) + ((y % 4) * 4) + (x % 4); 
 
-        bool half = (y / 4) % 2; // 0 = upper half, 1 = lower half
+      bool half = (y / 4) % 2; // 0 = upper half, 1 = lower half
 
-        for(uint8_t colorIdx = 0; colorIdx < 4; colorIdx++) {
-          //only works for 8 bit PWM currently, ToDo: gamma & dynamic bit resolution
+      for(uint8_t colorIdx = 0; colorIdx < 4; colorIdx++) {
+        uint16_t brightness = (pixelColor >> (8 * colorIdx)) & 0xFF;
+        brightness = gammaTable[brightness];
+        uint8_t bitToSet =  1 << (half * 4 + (3 - colorIdx));
 
-          if(((pixelColor >> ((8 * colorIdx))) & 0xFF) & (1 << pwmStep)) {
-            dmaBuf[pwmIndex + matrixIndex] |= 1 << (half * 4 + (3 - colorIdx));
+        for(uint16_t pwmStep = 0; pwmStep < PWM_RESOLUTION; pwmStep++) {
+          uint16_t pwmIndex = pwmStep * NUM_PIXELS / 2;
+
+          if(brightness & (1 << pwmStep)) {
+            dmaBuf[pwmIndex + matrixIndex] |= bitToSet;
           }
           else {
-            dmaBuf[pwmIndex + matrixIndex] &= ~(1 << (half * 4 + (3 - colorIdx)));
+            dmaBuf[pwmIndex + matrixIndex] &= ~bitToSet;
           }
         }
       }

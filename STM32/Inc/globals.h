@@ -36,7 +36,7 @@ uint16_t uartRxCounter;
 #define INITAL_BRIGHTNESS   255
 #define GAMMA_STEPS         256
 #define GAMMA_CORRECTION    2.2
-uint8_t gammaTable[GAMMA_STEPS];
+uint16_t gammaTable[GAMMA_STEPS];
 uint8_t globalBrightness;
 uint8_t pwmStepIdx;
 
