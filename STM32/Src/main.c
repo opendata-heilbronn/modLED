@@ -172,18 +172,18 @@ void startDMA() {
 
   if(HAL_DMA_Start_IT(DMA_TIMER.hdma[TIM_DMA_ID_CC1], dmaBufPos, (uint32_t)&GPIOA->ODR, (NUM_PIXELS / 2)) != HAL_OK) {
     _Error_Handler(__FILE__, __LINE__);
-  }
+  } 
 
   uint16_t prescaler = (MIN_PWM_PRESCALER << pwmStepIdx) - 1;
   __HAL_TIM_SET_PRESCALER(&DMA_TIMER, prescaler);
   __HAL_TIM_SET_PRESCALER(&LATCH_TIMER, prescaler);
 
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, 0);
 
   if(HAL_TIM_PWM_Start(&DMA_TIMER, DMA_CHANNEL) != HAL_OK) {
     _Error_Handler(__FILE__, __LINE__);
   }
   HAL_TIM_PWM_Start(&LATCH_TIMER, LATCH_CHANNEL);
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, 0);
 }
 
 
@@ -645,6 +645,7 @@ void _Error_Handler(char *file, int line)
     /* User can add his own implementation to report the HAL error return state */
     while(1)
     {
+      HAL_GPIO_TogglePin(PIN_LED);
     }
   /* USER CODE END Error_Handler_Debug */
 }

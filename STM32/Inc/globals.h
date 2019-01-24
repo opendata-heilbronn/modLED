@@ -16,8 +16,8 @@
 #define PANEL_HEIGHT        8
 #define PANEL_WIDTH         16
 #define NUM_PIXELS          (PANEL_HEIGHT * PANEL_WIDTH)
-#define PWM_RESOLUTION      8
-#define MIN_PWM_PRESCALER   36  //TODO: attention, prescale will not fit into 16 bits, if PWM_RESOLUTION > 10
+#define PWM_RESOLUTION      10
+#define MIN_PWM_PRESCALER   9  //TODO: attention, prescale will not fit into 16 bits, if PWM_RESOLUTION > 10
 
 #define DMA_BUF_LENGTH  ((NUM_PIXELS/2) * PWM_RESOLUTION)
 uint8_t dmaBuf[DMA_BUF_LENGTH]; // buffer for the raw data to be shifted out per frame
