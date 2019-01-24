@@ -16,8 +16,9 @@
 #define PANEL_HEIGHT        8
 #define PANEL_WIDTH         16
 #define NUM_PIXELS          (PANEL_HEIGHT * PANEL_WIDTH)
-#define PWM_RESOLUTION      10
-#define MIN_PWM_PRESCALER   9  //TODO: attention, prescale will not fit into 16 bits, if PWM_RESOLUTION > 10
+#define PWM_RESOLUTION      7
+#define MIN_PWM_PRESCALER   18  //TODO: attention, prescale will not fit into 16 bits, if PWM_RESOLUTION > 10
+//minor glitching at PSC 9, further down glitching becomes worse, DMA is not fast enough to keep up (160ns minimum pulse time)
 
 #define DMA_BUF_LENGTH  ((NUM_PIXELS/2) * PWM_RESOLUTION)
 uint8_t dmaBuf[DMA_BUF_LENGTH]; // buffer for the raw data to be shifted out per frame
@@ -33,7 +34,7 @@ uint32_t frameBuf[NUM_PIXELS];
 uint8_t uartBuffer[UART_BUFFER_LENGTH];
 uint16_t uartRxCounter;
 
-#define INITAL_BRIGHTNESS   255
+#define INITAL_BRIGHTNESS   32
 #define GAMMA_STEPS         256
 #define GAMMA_CORRECTION    2.2
 uint16_t gammaTable[GAMMA_STEPS];

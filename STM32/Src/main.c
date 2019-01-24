@@ -93,18 +93,19 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 /* USER CODE BEGIN 0 */
 
 //gamma generation playground: https://ideone.com/4WlJxv
-void setGlobalBrightness(uint8_t brightness) {
-  globalBrightness = brightness;
-  float brightnessFactor = (float)brightness / 255.0;
+void generateGammaTable() {
   for(int16_t i = 0; i < GAMMA_STEPS; i++) {
     uint16_t maxVal = (1 << PWM_RESOLUTION) - 1;
-    float step = (float)i * brightnessFactor;
-    step *= (float)maxVal / 255.0;
+    float step = (float)i * (float)maxVal / 255.0;
     step = round(step);
 
     gammaTable[i] = (uint16_t)(pow(step / maxVal, GAMMA_CORRECTION) * maxVal); 
-    // gammaTable[i] = 255;
   }
+}
+
+void setGlobalBrightness(uint8_t brightness) {
+  globalBrightness = brightness;
+  __HAL_TIM_SET_COMPARE(&PWM_TIMER, PWM_CHANNEL, brightness);
 }
 
 void mapFrameBuf() {
@@ -169,19 +170,28 @@ void startDMA() {
 
   uint32_t dmaBufPos = (uint32_t)dmaBuf + (pwmStepIdx * (NUM_PIXELS / 2));
 
-  while(HAL_DMA_GetState(DMA_TIMER.hdma[TIM_DMA_ID_CC1]) == HAL_DMA_STATE_BUSY) {
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, 0);
+
+  if(HAL_DMA_GetState(DMA_TIMER.hdma[TIM_DMA_ID_CC1]) == HAL_DMA_STATE_BUSY) {
     HAL_GPIO_TogglePin(PIN_LED);
+
+    // DMA_TIMER.Instance->RCR = DMA_TIMER.hdma[TIM_DMA_ID_CC1]->Instance->CNDTR / 2;
+
+    // if(HAL_TIM_PWM_Start(&DMA_TIMER, DMA_CHANNEL) != HAL_OK) {
+    //   _Error_Handler(__FILE__, __LINE__);
+    // }
+
+    // return;
   }
 
   if(HAL_DMA_Start_IT(DMA_TIMER.hdma[TIM_DMA_ID_CC1], dmaBufPos, (uint32_t)&GPIOA->ODR, (NUM_PIXELS / 2)) != HAL_OK) {
-    _Error_Handler(__FILE__, __LINE__);
+    // _Error_Handler(__FILE__, __LINE__);
   } 
 
   uint16_t prescaler = (MIN_PWM_PRESCALER << pwmStepIdx) - 1;
   __HAL_TIM_SET_PRESCALER(&DMA_TIMER, prescaler);
   __HAL_TIM_SET_PRESCALER(&LATCH_TIMER, prescaler);
 
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, 0);
 
   if(HAL_TIM_PWM_Start(&DMA_TIMER, DMA_CHANNEL) != HAL_OK) {
     _Error_Handler(__FILE__, __LINE__);
@@ -250,10 +260,12 @@ int main(void)
   for(uint32_t i = 0; i < NUM_PIXELS; i++) {
     //generate test pattern of increasing brightness
     uint8_t c = i * 2;
+    // if(i % 2 == 0)
+    //   frameBuf[i] = 0xFFFFFFFF;
     frameBuf[i] = c << 24 | c << 16 | c << 8 | c;
-    //frameBuf[i] = 0xFFFFFFFF;
   }
-  
+
+  generateGammaTable();
   setGlobalBrightness(INITAL_BRIGHTNESS);
   //initial framebuffer to DMA buffer mapping
   mapFrameBuf();
@@ -273,8 +285,9 @@ int main(void)
 
   HAL_UART_Receive_DMA(&RX_UART, uartBuffer, UART_BUFFER_LENGTH);
 
-  HAL_GPIO_WritePin(PIN_OE, 0);
+  //HAL_GPIO_WritePin(PIN_OE, 0);
 
+  uint8_t pixelPos = 0;
 
   /* USER CODE END 2 */
 
@@ -288,10 +301,10 @@ int main(void)
   HAL_GPIO_TogglePin(PIN_LED);
 
   //generate test pattern
-  /*frameBuf[pixelPos % NUM_PIXELS] = 0;
-  frameBuf[(pixelPos + 1) % NUM_PIXELS] = 0xFFFFFFFF;
-  pixelPos++;
-  HAL_Delay(100);*/
+  // frameBuf[pixelPos % NUM_PIXELS] = 0;
+  // frameBuf[(pixelPos + 1) % NUM_PIXELS] = 0xFFFFFFFF;
+  // pixelPos++;
+  // HAL_Delay(100);
 
   // map frame buffer to DMA buffer
   mapFrameBuf();
@@ -567,7 +580,7 @@ static void MX_DMA_Init(void)
   HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
   /* DMA1_Channel5_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 5, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel5_IRQn);
 
 }
