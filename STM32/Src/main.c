@@ -169,6 +169,9 @@ void startDMA() {
 
   uint32_t dmaBufPos = (uint32_t)dmaBuf + (pwmStepIdx * (NUM_PIXELS / 2));
 
+  while(HAL_DMA_GetState(DMA_TIMER.hdma[TIM_DMA_ID_CC1]) == HAL_DMA_STATE_BUSY) {
+    HAL_GPIO_TogglePin(PIN_LED);
+  }
 
   if(HAL_DMA_Start_IT(DMA_TIMER.hdma[TIM_DMA_ID_CC1], dmaBufPos, (uint32_t)&GPIOA->ODR, (NUM_PIXELS / 2)) != HAL_OK) {
     _Error_Handler(__FILE__, __LINE__);
