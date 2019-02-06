@@ -26,8 +26,8 @@ uint8_t dmaBuf[DMA_BUF_LENGTH]; // buffer for the raw data to be shifted out per
 // color mapping: [r1, r2, g, b]
 uint32_t frameBuf[NUM_PIXELS];
 
-#define RX_UART             huart1
-#define RX_UART_DMA         hdma_usart1_rx
+#define RX_UART             huart3
+#define RX_UART_DMA         hdma_usart3_rx
 #define RX_BAUD             1250000
 #define UART_BUFFER_LENGTH  16
 #define UART_PROTOCOL_INIT  1

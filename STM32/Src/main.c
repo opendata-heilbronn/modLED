@@ -64,8 +64,8 @@ TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
 DMA_HandleTypeDef hdma_tim1_ch1;
 
-UART_HandleTypeDef huart1;
-DMA_HandleTypeDef hdma_usart1_rx;
+UART_HandleTypeDef huart3;
+DMA_HandleTypeDef hdma_usart3_rx;
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
@@ -76,10 +76,10 @@ DMA_HandleTypeDef hdma_usart1_rx;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
-static void MX_USART1_UART_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_TIM1_Init(void);
-static void MX_TIM2_Init(void);                                    
+static void MX_TIM2_Init(void);
+static void MX_USART3_UART_Init(void);                                    
 void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
                                 
                                 
@@ -172,7 +172,7 @@ void startDMA() {
 
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, 0);
 
-  if(HAL_DMA_GetState(DMA_TIMER.hdma[TIM_DMA_ID_CC1]) == HAL_DMA_STATE_BUSY) {
+  if(HAL_DMA_GetState(DMA_TIMER.hdma[TIM_DMA_ID_UPDATE]) == HAL_DMA_STATE_BUSY) {
     HAL_GPIO_TogglePin(PIN_LED);
 
     // DMA_TIMER.Instance->RCR = DMA_TIMER.hdma[TIM_DMA_ID_CC1]->Instance->CNDTR / 2;
@@ -184,7 +184,7 @@ void startDMA() {
     // return;
   }
 
-  if(HAL_DMA_Start_IT(DMA_TIMER.hdma[TIM_DMA_ID_CC1], dmaBufPos, (uint32_t)&GPIOA->ODR, (NUM_PIXELS / 2)) != HAL_OK) {
+  if(HAL_DMA_Start_IT(DMA_TIMER.hdma[TIM_DMA_ID_UPDATE], dmaBufPos, (uint32_t)&GPIOA->ODR, (NUM_PIXELS / 2)) != HAL_OK) {
     // _Error_Handler(__FILE__, __LINE__);
   } 
 
@@ -244,10 +244,10 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_DMA_Init();
-  MX_USART1_UART_Init();
   MX_TIM3_Init();
   MX_TIM1_Init();
   MX_TIM2_Init();
+  MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
 
   pwmStepIdx = 0;
@@ -271,8 +271,8 @@ int main(void)
   mapFrameBuf();
   
 
-  DMA_TIMER.hdma[TIM_DMA_ID_CC1]->XferCpltCallback = dataTransmittedHandler;
-  DMA_TIMER.hdma[TIM_DMA_ID_CC1]->XferErrorCallback = transmitErrorHandler;
+  DMA_TIMER.hdma[TIM_DMA_ID_UPDATE]->XferCpltCallback = dataTransmittedHandler;
+  DMA_TIMER.hdma[TIM_DMA_ID_UPDATE]->XferErrorCallback = transmitErrorHandler;
 
   __HAL_TIM_ENABLE_DMA(&DMA_TIMER, TIM_DMA_CC1);
   __HAL_TIM_ENABLE_IT(&DMA_TIMER, TIM_IT_UPDATE);
@@ -548,19 +548,19 @@ static void MX_TIM3_Init(void)
 
 }
 
-/* USART1 init function */
-static void MX_USART1_UART_Init(void)
+/* USART3 init function */
+static void MX_USART3_UART_Init(void)
 {
 
-  huart1.Instance = USART1;
-  huart1.Init.BaudRate = RX_BAUD;
-  huart1.Init.WordLength = UART_WORDLENGTH_8B;
-  huart1.Init.StopBits = UART_STOPBITS_1;
-  huart1.Init.Parity = UART_PARITY_NONE;
-  huart1.Init.Mode = UART_MODE_TX_RX;
-  huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
-  if (HAL_UART_Init(&huart1) != HAL_OK)
+  huart3.Instance = USART3;
+  huart3.Init.BaudRate = RX_BAUD;
+  huart3.Init.WordLength = UART_WORDLENGTH_8B;
+  huart3.Init.StopBits = UART_STOPBITS_1;
+  huart3.Init.Parity = UART_PARITY_NONE;
+  huart3.Init.Mode = UART_MODE_TX_RX;
+  huart3.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart3.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart3) != HAL_OK)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
@@ -579,9 +579,9 @@ static void MX_DMA_Init(void)
   /* DMA1_Channel2_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
-  /* DMA1_Channel5_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Channel5_IRQn);
+  /* DMA1_Channel3_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
 
 }
 
