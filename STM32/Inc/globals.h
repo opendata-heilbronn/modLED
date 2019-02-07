@@ -13,6 +13,10 @@
 #define PIN_LAT GPIOB, GPIO_PIN_5
 #define PIN_LED GPIOC, GPIO_PIN_13
 
+#define _WIZCHIP_   5500
+#define ETH_SPI     hspi2
+#define SPI2_NSS    GPIOB, GPIO_PIN_12
+
 #define PANEL_HEIGHT        8
 #define PANEL_WIDTH         16
 #define NUM_PIXELS          (PANEL_HEIGHT * PANEL_WIDTH)

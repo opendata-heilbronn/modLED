@@ -57,6 +57,8 @@
 #include <math.h>
 #include "globals.h"
 
+//these includes are correctly handled during platform io build
+// they probably won't work with the stock makefile, changes are needed
 #include "wizchip_conf.h"
 #include "socket.h"
 /* USER CODE END Includes */
@@ -219,6 +221,74 @@ void ISR_TIM2() {
 
 }
 
+void spiStart() {
+  __HAL_SPI_ENABLE(&ETH_SPI);
+}
+
+void spiStop() {
+  // while(__HAL_SPI_GET_FLAG(&ETH_SPI, SPI_SR_BSY)); //maybe needed, dunno
+  __HAL_SPI_DISABLE(&ETH_SPI);
+}
+
+void spiWrite(uint8_t* buf, uint16_t len) {
+  HAL_SPI_Transmit(&ETH_SPI, buf, len, HAL_MAX_DELAY);
+}
+
+void spiRead(uint8_t* buf, uint16_t len) {
+  HAL_SPI_Receive(&ETH_SPI, buf, len, HAL_MAX_DELAY);
+}
+
+void spiWriteByte(uint8_t byte) {
+  spiWrite(&byte, 1);
+}
+
+uint8_t spiReadByte() {
+  uint8_t byte;
+  spiRead(&byte, 1);
+  return byte;
+}
+
+
+void generateMAC(uint8_t* macArray) {
+  uint32_t uid[3];
+  HAL_GetUID(uid);
+  macArray[0] = 0x42;
+  macArray[1] = (uid[0] >> 0) & 0xFF;
+  macArray[2] = (uid[0] >> 8) & 0xFF;
+  macArray[3] = (uid[0] >> 16) & 0xFF;
+  macArray[4] = (uid[0] >> 24) & 0xFF;
+  macArray[5] = (uid[1] >> 0) & 0xFF;
+}
+
+void initEthernet() {
+  reg_wizchip_cs_cbfunc(&spiStart, &spiStop);
+  reg_wizchip_spi_cbfunc(&spiReadByte, &spiWriteByte);
+  reg_wizchip_spiburst_cbfunc(&spiRead, &spiWrite);
+
+  //executes getMAC & the 3 IPs, afterwards writes 00 00 04 80 for reset
+  // then setMAC & the 3 IPs, but I don't remember seeing that on the logicanalyzer, maybe because of the NULL pointers instead of 0?
+  if(wizchip_init(NULL, NULL) < 0) { //initialize with default memory settings
+    _Error_Handler(__FILE__, __LINE__);
+  } 
+
+  uint8_t mac[6];
+  generateMAC(mac);
+  setSHAR(mac);
+
+  getSHAR(mac);
+
+
+  uint8_t ip[4] = { 192, 168, 178, 250 };
+  setSIPR(ip); //set client IP
+
+  ip[3] = 1;
+  setGAR(ip); //set gateway IP
+
+  memset(ip, 0xFF, 3);
+  ip[3] = 0;
+  setSUBR(ip); //set subnet mask
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -286,16 +356,16 @@ int main(void)
   __HAL_TIM_ENABLE_IT(&DMA_TIMER, TIM_IT_UPDATE);
   
   startDMA();
-  // HAL_TIM_PWM_Start(&DMA_TIMER, DMA_CHANNEL);
-  // HAL_TIM_PWM_Start(&LATCH_TIMER, LATCH_CHANNEL);
   
   HAL_TIM_PWM_Start(&PWM_TIMER, PWM_CHANNEL);
 
   HAL_UART_Receive_DMA(&RX_UART, uartBuffer, UART_BUFFER_LENGTH);
 
-  //HAL_GPIO_WritePin(PIN_OE, 0);
 
-  uint8_t pixelPos = 0;
+  initEthernet();
+
+
+  // uint8_t pixelPos = 0;
 
   /* USER CODE END 2 */
 
@@ -383,7 +453,7 @@ static void MX_SPI2_Init(void)
   hspi2.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi2.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi2.Init.NSS = SPI_NSS_HARD_OUTPUT;
-  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_32;
   hspi2.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi2.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
