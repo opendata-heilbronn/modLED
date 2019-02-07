@@ -55,12 +55,14 @@
 #include <string.h>
 #include <stdbool.h>
 #include <math.h>
+#include <stdarg.h>
 #include "globals.h"
 
 //these includes are correctly handled during platform io build
 // they probably won't work with the stock makefile, changes are needed
 #include "wizchip_conf.h"
 #include "socket.h"
+#include "DHCP/dhcp.h"
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
@@ -73,6 +75,7 @@ DMA_HandleTypeDef hdma_tim1_ch1;
 
 UART_HandleTypeDef huart1;
 DMA_HandleTypeDef hdma_usart1_rx;
+DMA_HandleTypeDef hdma_usart1_tx;
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
@@ -147,6 +150,15 @@ void mapFrameBuf() {
       }
     }
   }
+}
+
+void UART_Printf(const char* fmt, ...) {
+  char buf[512];
+  va_list args;
+  va_start(args, fmt);
+  vsnprintf(buf, sizeof(buf), fmt, args);
+  HAL_UART_Transmit(&RX_UART, (uint8_t*)buf, strlen(buf), 1000);
+  va_end(args);
 }
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef* huart) {
@@ -260,14 +272,79 @@ void generateMAC(uint8_t* macArray) {
   macArray[5] = (uid[1] >> 0) & 0xFF;
 }
 
+volatile bool ipAssigned = false;
+
+void cbkIPAssigned() {
+  UART_Printf("IP assigned!\n");
+  ipAssigned = true;
+}
+
+void cbkIPConflict() {
+  UART_Printf("ERROR: IP conflict!\n");
+}
+
+//unused and untested for now
+void doDHCP() {
+  UART_Printf("Beginning DHCP...\n");
+  uint8_t dhcp_buffer[1024];
+  wiz_NetInfo netInfo = {
+    .dhcp = NETINFO_DHCP
+  };
+  generateMAC(netInfo.mac);
+
+  setSHAR(netInfo.mac);
+
+  DHCP_init(SOCKET_DHCP, dhcp_buffer);
+
+  reg_dhcp_cbfunc(cbkIPAssigned, cbkIPAssigned, cbkIPConflict);
+
+  //should probably be called in main loop, but test for now if it even works at all
+  uint32_t repeats = 10000;
+  while(!ipAssigned && repeats > 0) {
+    DHCP_run();
+    repeats--;
+  }
+
+  if(!ipAssigned) {
+    UART_Printf("ERROR: no IP was assigned in time \n");
+    return;
+  }
+
+  getIPfromDHCP(netInfo.ip);
+  getGWfromDHCP(netInfo.gw);
+  getSNfromDHCP(netInfo.sn);
+  getDNSfromDHCP(netInfo.dns);
+
+  UART_Printf("IP:  %d.%d.%d.%d\nGW:  %d.%d.%d.%d\nNet: %d.%d.%d.%d\nDNS: %d.%d.%d.%d\n",
+    netInfo.ip[0], netInfo.ip[1], netInfo.ip[2], netInfo.ip[3],
+    netInfo.gw[0], netInfo.gw[1], netInfo.gw[2], netInfo.gw[3],
+    netInfo.sn[0], netInfo.sn[1], netInfo.sn[2], netInfo.sn[3],
+    netInfo.dns[0], netInfo.dns[1], netInfo.dns[2], netInfo.dns[3]
+  );
+
+  wizchip_setnetinfo(&netInfo);
+  
+}
+
 void initEthernet() {
+  UART_Printf("Initializing Ethernet...");
+
+  // Reset ethernet module. Does not improve communicatoin either...
+  HAL_GPIO_WritePin(ETH_RESET_PIN, 0);
+  HAL_Delay(1);
+  HAL_GPIO_WritePin(ETH_RESET_PIN, 1);
+  HAL_Delay(400);
+  
   reg_wizchip_cs_cbfunc(&spiStart, &spiStop);
   reg_wizchip_spi_cbfunc(&spiReadByte, &spiWriteByte);
   reg_wizchip_spiburst_cbfunc(&spiRead, &spiWrite);
 
+  uint8_t tx_size[8] = { 2, 2, 2, 2, 2, 2, 2, 2 }; // Device default memory setting
+  uint8_t rx_size[8] = { 2, 2, 2, 2, 2, 2, 2, 2 };
+
   //executes getMAC & the 3 IPs, afterwards writes 00 00 04 80 for reset
   // then setMAC & the 3 IPs, but I don't remember seeing that on the logicanalyzer, maybe because of the NULL pointers instead of 0?
-  if(wizchip_init(NULL, NULL) < 0) { //initialize with default memory settings
+  if(wizchip_init(tx_size, rx_size) < 0) { //initialize with default memory settings
     _Error_Handler(__FILE__, __LINE__);
   } 
 
@@ -287,6 +364,11 @@ void initEthernet() {
   memset(ip, 0xFF, 3);
   ip[3] = 0;
   setSUBR(ip); //set subnet mask
+
+  getSIPR(ip);
+
+  UART_Printf(" done. Saved IP: %d.%d.%d.%d\n", ip[0], ip[1], ip[2], ip[3]);
+  doDHCP();
 }
 
 /* USER CODE END 0 */
@@ -328,6 +410,8 @@ int main(void)
   MX_SPI2_Init();
   /* USER CODE BEGIN 2 */
 
+  UART_Printf("\nmodLED Matrix Controller starting...\n");
+
   pwmStepIdx = 0;
   uartRxCounter = 0;
 
@@ -361,7 +445,6 @@ int main(void)
 
   HAL_UART_Receive_DMA(&RX_UART, uartBuffer, UART_BUFFER_LENGTH);
 
-
   initEthernet();
 
 
@@ -376,16 +459,16 @@ int main(void)
   /* USER CODE END WHILE */
 
   /* USER CODE BEGIN 3 */
-  HAL_GPIO_TogglePin(PIN_LED);
+    HAL_GPIO_TogglePin(PIN_LED);
 
-  //generate test pattern
-  // frameBuf[pixelPos % NUM_PIXELS] = 0;
-  // frameBuf[(pixelPos + 1) % NUM_PIXELS] = 0xFFFFFFFF;
-  // pixelPos++;
-  // HAL_Delay(100);
+    //generate test pattern
+    // frameBuf[pixelPos % NUM_PIXELS] = 0;
+    // frameBuf[(pixelPos + 1) % NUM_PIXELS] = 0xFFFFFFFF;
+    // pixelPos++;
+    // HAL_Delay(100);
 
-  // map frame buffer to DMA buffer
-  mapFrameBuf();
+    // map frame buffer to DMA buffer
+    mapFrameBuf();
   }
   /* USER CODE END 3 */
 
@@ -681,6 +764,9 @@ static void MX_DMA_Init(void)
   /* DMA1_Channel2_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
+  /* DMA1_Channel4_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel4_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel4_IRQn);
   /* DMA1_Channel5_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel5_IRQn);
@@ -715,6 +801,9 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_5, GPIO_PIN_RESET);
 
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, GPIO_PIN_SET);
+
   /*Configure GPIO pin : PC13 */
   GPIO_InitStruct.Pin = GPIO_PIN_13;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
@@ -735,6 +824,13 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PB11 */
+  GPIO_InitStruct.Pin = GPIO_PIN_11;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
@@ -761,6 +857,7 @@ void _Error_Handler(char *file, int line)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
     /* User can add his own implementation to report the HAL error return state */
+    UART_Printf("ERROR: ran into error in file %s:%d", file, line);
     while(1)
     {
       HAL_GPIO_TogglePin(PIN_LED);
