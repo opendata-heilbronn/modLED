@@ -173,7 +173,7 @@ uint8_t ftpd_run(uint8_t * dbuf)
 #if defined(_FTP_DEBUG_)
     				printf("%d:send() error:%ld\r\n",CTRL_SOCK,ret);
 #endif
-    				close(CTRL_SOCK);
+    				closeSock(CTRL_SOCK);
     				return ret;
     			}
     			connect_state_control = 1;
@@ -203,7 +203,7 @@ uint8_t ftpd_run(uint8_t * dbuf)
 #if defined(_FTP_DEBUG_)
     					printf("%d:recv() error:%ld\r\n",CTRL_SOCK,ret);
 #endif
-    					close(CTRL_SOCK);
+    					closeSock(CTRL_SOCK);
     					return ret;
     				}
     			}
@@ -233,7 +233,7 @@ uint8_t ftpd_run(uint8_t * dbuf)
 #if defined(_FTP_DEBUG_)
     			printf("%d:socket() error:%ld\r\n", CTRL_SOCK, ret);
 #endif
-    			close(CTRL_SOCK);
+    			closeSock(CTRL_SOCK);
     			return ret;
     		}
     		break;
@@ -336,7 +336,7 @@ uint8_t ftpd_run(uint8_t * dbuf)
 #if defined(_FTP_DEBUG_)
     					printf("\r\nFile read finished\r\n");
 #endif
-    					ftp.fr = f_close(&(ftp.fil));
+    					ftp.fr = f_closeSock(&(ftp.fil));
     				}else{
 #if defined(_FTP_DEBUG_)
     					printf("File Open Error: %d\r\n", ftp.fr);
@@ -424,7 +424,7 @@ uint8_t ftpd_run(uint8_t * dbuf)
 #if defined(_FTP_DEBUG_)
     					printf("\r\nFile write finished\r\n");
 #endif
-    					ftp.fr = f_close(&(ftp.fil));
+    					ftp.fr = f_closeSock(&(ftp.fil));
     				}else{
 #if defined(_FTP_DEBUG_)
     					printf("File Open Error: %d\r\n", ftp.fr);
@@ -494,7 +494,7 @@ uint8_t ftpd_run(uint8_t * dbuf)
 #if defined(_FTP_DEBUG_)
    						printf("%d:socket() error:%ld\r\n", DATA_SOCK, ret);
 #endif
-   						close(DATA_SOCK);
+   						closeSock(DATA_SOCK);
    						return ret;
    					}
 
@@ -510,7 +510,7 @@ uint8_t ftpd_run(uint8_t * dbuf)
 #if defined(_FTP_DEBUG_)
    						printf("%d:socket() error:%ld\r\n", DATA_SOCK, ret);
 #endif
-   						close(DATA_SOCK);
+   						closeSock(DATA_SOCK);
    						return ret;
    					}
    				}
@@ -617,7 +617,7 @@ char proc_ftpd(char * buf)
 #if defined(_FTP_DEBUG_)
 				printf("%d:send() error:%ld\r\n",CTRL_SOCK,ret);
 #endif
-				close(CTRL_SOCK);
+				closeSock(CTRL_SOCK);
 				return ret;
 			}
 			break;

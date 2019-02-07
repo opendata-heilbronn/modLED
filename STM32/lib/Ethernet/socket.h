@@ -63,7 +63,7 @@
  *    <tr>   <td><b>send()</b></td> <td>O</td> <td>O</td>   </tr>
  *    <tr>   <td><b>recvfrom()</b></td> <td>O</td> <td>O</td>   </tr>
  *    <tr>   <td><b>sendto()</b></td> <td>O</td> <td>O</td>    </tr>
- *    <tr>   <td><b>closesocket()</b></td> <td>O<br>close() & disconnect()</td> <td>O</td>   </tr>
+ *    <tr>   <td><b>closesocket()</b></td> <td>O<br>closeSock() & disconnect()</td> <td>O</td>   </tr>
  * </table>
  * There are @b bind() and @b accept() functions in @b Berkeley SOCKET API but,
  * not in @b WIZnet SOCKET API. Because socket() of WIZnet is not only creating a SOCKET but also binding a local port number,
@@ -174,7 +174,7 @@ int8_t  socket(uint8_t sn, uint8_t protocol, uint16_t port, uint8_t flag);
  * @return @b Success : @ref SOCK_OK \n
  *         @b Fail    : @ref SOCKERR_SOCKNUM - Invalid socket number
  */
-int8_t  close(uint8_t sn);
+int8_t  closeSock(uint8_t sn);
 
 /**
  * @ingroup WIZnet_socket_APIs

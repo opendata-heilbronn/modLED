@@ -165,7 +165,7 @@ int8_t socket(uint8_t sn, uint8_t protocol, uint16_t port, uint8_t flag)
    	      break;
    	}
    }
-	close(sn);
+	closeSock(sn);
 	//M20150601
 	#if _WIZCHIP_ == 5300
 	   setSn_MR(sn, ((uint16_t)(protocol | (flag & 0xF0))) | (((uint16_t)(flag & 0x02)) << 7) );
@@ -194,7 +194,7 @@ int8_t socket(uint8_t sn, uint8_t protocol, uint16_t port, uint8_t flag)
    return (int8_t)sn;
 }	   
 
-int8_t close(uint8_t sn)
+int8_t closeSock(uint8_t sn)
 {
 	CHECK_SOCKNUM();
 //A20160426 : Applied the erratum 1 of W5300
@@ -211,7 +211,7 @@ int8_t close(uint8_t sn)
       // ex> wait_1s();
       //     if (getSn_TX_FSR(s) == getSn_TxMAX(s)) continue;
       // 
-      //M20160503 : The socket() of close() calls close() itself again. It occures a infinite loop - close()->socket()->close()->socket()-> ~
+      //M20160503 : The socket() of closeSock() calls closeSock() itself again. It occures a infinite loop - closeSock()->socket()->closeSock()->socket()-> ~
       //socket(s,Sn_MR_UDP,0x3000,0);
       //sendto(s,destip,1,destip,0x3000); // send the dummy data to an unknown destination(0.0.0.1).
       setSn_MR(sn,Sn_MR_UDP);
@@ -246,7 +246,7 @@ int8_t listen(uint8_t sn)
 	while(getSn_CR(sn));
    while(getSn_SR(sn) != SOCK_LISTEN)
    {
-         close(sn);
+         closeSock(sn);
          return SOCKERR_SOCKCLOSED;
    }
    return SOCK_OK;
@@ -306,7 +306,7 @@ int8_t disconnect(uint8_t sn)
 	{
 	   if(getSn_IR(sn) & Sn_IR_TIMEOUT)
 	   {
-	      close(sn);
+	      closeSock(sn);
 	      return SOCKERR_TIMEOUT;
 	   }
 	}
@@ -343,7 +343,7 @@ int32_t send(uint8_t sn, uint8_t * buf, uint16_t len)
       }
       else if(tmp & Sn_IR_TIMEOUT)
       {
-         close(sn);
+         closeSock(sn);
          return SOCKERR_TIMEOUT;
       }
       else return SOCK_BUSY;
@@ -356,7 +356,7 @@ int32_t send(uint8_t sn, uint8_t * buf, uint16_t len)
       tmp = getSn_SR(sn);
       if ((tmp != SOCK_ESTABLISHED) && (tmp != SOCK_CLOSE_WAIT))
       {
-         close(sn);
+         closeSock(sn);
          return SOCKERR_SOCKSTATUS;
       }
       if( (sock_io_mode & (1<<sn)) && (len > freesize) ) return SOCK_BUSY;
@@ -416,13 +416,13 @@ int32_t recv(uint8_t sn, uint8_t * buf, uint16_t len)
                if(recvsize != 0) break;
                else if(getSn_TX_FSR(sn) == getSn_TxMAX(sn))
                {
-                  close(sn);
+                  closeSock(sn);
                   return SOCKERR_SOCKSTATUS;
                }
             }
             else
             {
-               close(sn);
+               closeSock(sn);
                return SOCKERR_SOCKSTATUS;
             }
          }
@@ -709,7 +709,7 @@ int32_t recvfrom(uint8_t sn, uint8_t * buf, uint16_t len, uint8_t * addr, uint16
 			#endif
    			if(sock_remained_size[sn] > 1514) 
    			{
-   			   close(sn);
+   			   closeSock(sn);
    			   return SOCKFATAL_PACKLEN;
    			}
    			sock_pack_info[sn] = PACK_FIRST;

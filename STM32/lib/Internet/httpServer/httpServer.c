@@ -207,7 +207,7 @@ void httpServer_run(uint8_t seqnum)
 					HTTPSock_Status[seqnum].sock_status = STATE_HTTP_IDLE;
 
 //#ifdef _USE_SDCARD_
-//					f_close(&fs);
+//					f_closeSock(&fs);
 //#endif
 #ifdef _USE_WATCHDOG_
 					HTTPServer_WDT_Reset();
@@ -453,7 +453,7 @@ static void send_http_response_body(uint8_t s, uint8_t * uri_name, uint8_t * buf
 
 // ## 20141219 Eric added, for 'File object structure' (fs) allocation reduced (8 -> 1)
 #ifdef _USE_SDCARD_
-	f_close(&fs);
+	f_closeSock(&fs);
 #endif
 // ## 20141219 added end
 }

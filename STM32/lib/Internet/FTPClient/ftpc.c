@@ -228,7 +228,7 @@ uint8_t ftpc_run(uint8_t * dbuf)
     				if(ret==SOCK_BUSY) return 0;
     				if(ret < 0){
     					printf("%d:recv() error:%ld\r\n",CTRL_SOCK,ret);
-    					close(CTRL_SOCK);
+    					closeSock(CTRL_SOCK);
     					return ret;
     				}
     			}
@@ -245,7 +245,7 @@ uint8_t ftpc_run(uint8_t * dbuf)
     		printf("%d:FTPStart\r\n",CTRL_SOCK);
     		if((ret=socket(CTRL_SOCK, Sn_MR_TCP, FTP_destport, 0x0)) != CTRL_SOCK){
     			printf("%d:socket() error:%ld\r\n", CTRL_SOCK, ret);
-    			close(CTRL_SOCK);
+    			closeSock(CTRL_SOCK);
     			return ret;
     		}
     		break;
@@ -282,7 +282,7 @@ uint8_t ftpc_run(uint8_t * dbuf)
 							if(ret==SOCK_BUSY) return 0;
 							if(ret < 0){
 								printf("%d:recv() error:%ld\r\n",CTRL_SOCK,ret);
-								close(DATA_SOCK);
+								closeSock(DATA_SOCK);
 								return ret;
 							}
 						}
@@ -317,11 +317,11 @@ uint8_t ftpc_run(uint8_t * dbuf)
 							remain_filesize -= blocklen;
 						}while(remain_filesize != 0);
 						printf("\r\nFile read finished\r\n");
-						ftpc.fr = f_close(&(ftpc.fil));
+						ftpc.fr = f_closeSock(&(ftpc.fil));
 					}
 					else{
 						printf("File Open Error: %d\r\n", ftpc.fr);
-						ftpc.fr = f_close(&(ftpc.fil));
+						ftpc.fr = f_closeSock(&(ftpc.fil));
 					}
 #else
 					remain_filesize = strlen(ftpc.filename);
@@ -373,7 +373,7 @@ uint8_t ftpc_run(uint8_t * dbuf)
 							}
 						}
 						printf("\r\nFile write finished\r\n");
-						ftpc.fr = f_close(&(ftpc.fil));
+						ftpc.fr = f_closeSock(&(ftpc.fil));
 						gDataPutGetStart = 0;
 					}else{
 						printf("File Open Error: %d\r\n", ftpc.fr);
@@ -419,7 +419,7 @@ uint8_t ftpc_run(uint8_t * dbuf)
    					printf("%d:FTPDataStart, port : %d\r\n",DATA_SOCK, local_port);
    					if((ret=socket(DATA_SOCK, Sn_MR_TCP, local_port, 0x0)) != DATA_SOCK){
    						printf("%d:socket() error:%ld\r\n", DATA_SOCK, ret);
-   						close(DATA_SOCK);
+   						closeSock(DATA_SOCK);
    						return ret;
    					}
    					local_port++;
@@ -429,7 +429,7 @@ uint8_t ftpc_run(uint8_t * dbuf)
    					printf("%d:FTPDataStart, port : %d\r\n",DATA_SOCK, local_port);
    					if((ret=socket(DATA_SOCK, Sn_MR_TCP, local_port, 0x0)) != DATA_SOCK){
    						printf("%d:socket() error:%ld\r\n", DATA_SOCK, ret);
-   						close(DATA_SOCK);
+   						closeSock(DATA_SOCK);
    						return ret;
    					}
    					local_port++;

@@ -132,7 +132,7 @@ void get_seconds_from_ntp_server(uint8_t *buf, uint16_t idx)
 	case 20:
 		seconds -=  1*3600;
 		break;
-	case 21:                            //ï¼?
+	case 21:                            //ï¿½?
 	case 22:
 		break;
 	case 23:
@@ -271,7 +271,7 @@ int8_t SNTP_run(datetime *time)
 			time->ss = Nowdatetime.ss;
 
 			ntp_retry_cnt=0;
-			close(NTP_SOCKET);
+			closeSock(NTP_SOCKET);
 
 			return 1;
 		}
@@ -301,7 +301,7 @@ int8_t SNTP_run(datetime *time)
 #ifdef _SNTP_DEBUG_
 			printf("ntp retry failed!\r\n");
 #endif
-			close(NTP_SOCKET);
+			closeSock(NTP_SOCKET);
 		}
 		break;
 	case SOCK_CLOSED:

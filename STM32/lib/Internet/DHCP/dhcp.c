@@ -802,7 +802,7 @@ uint8_t DHCP_run(void)
 
 void    DHCP_stop(void)
 {
-   close(DHCP_SOCKET);
+   closeSock(DHCP_SOCKET);
    dhcp_state = STATE_DHCP_STOP;
 }
 

@@ -193,7 +193,7 @@ static int recv_udp_packet(int socket, uint8_t *packet, uint32_t len, uint32_t *
 
 static void close_tftp_socket(int socket)
 {
-	close(socket);
+	closeSock(socket);
 }
 
 

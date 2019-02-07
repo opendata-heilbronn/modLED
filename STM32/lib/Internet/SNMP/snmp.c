@@ -880,7 +880,7 @@ int32_t snmp_sendTrap(uint8_t * managerIP, uint8_t * agentIP, int8_t* community,
 		socket(SOCK_SNMP_TRAP, Sn_MR_UDP, PORT_SNMP_TRAP, 0);
 		sendto(SOCK_SNMP_TRAP, packet_trap, packet_index, managerIP, PORT_SNMP_TRAP);
 		
-		close(SOCK_SNMP_TRAP);
+		closeSock(SOCK_SNMP_TRAP);
 		return 0;
 	}
 }

@@ -549,7 +549,7 @@ int8_t DNS_run(uint8_t * dns_ip, uint8_t * name, uint8_t * ip_from_dns)
 			sendto(DNS_SOCKET, pDNSMSG, len, dns_ip, IPPORT_DOMAIN);
 		}
 	}
-	close(DNS_SOCKET);
+	closeSock(DNS_SOCKET);
 	// Return value
 	// 0 > :  failed / 1 - success
 	return ret;
