@@ -125,6 +125,7 @@ void mapFrameBuf() {
 
       // does not differentiate between upper and lower half
       uint16_t matrixIndex = ((x / 4) * 16) + ((y % 4) * 4) + (x % 4); 
+      matrixIndex += 64 * (y / 8); //offset for next panel
 
       bool half = (y / 4) % 2; // 0 = upper half, 1 = lower half
 
@@ -134,7 +135,7 @@ void mapFrameBuf() {
         uint8_t bitToSet =  1 << (half * 4 + (3 - colorIdx));
 
         for(uint16_t pwmStep = 0; pwmStep < PWM_RESOLUTION; pwmStep++) {
-          uint16_t pwmIndex = pwmStep * NUM_PIXELS / 2;
+          uint16_t pwmIndex = pwmStep * NUM_PIXELS / 2; 
 
           if(brightness & (1 << pwmStep)) {
             dmaBuf[pwmIndex + matrixIndex] |= bitToSet;
@@ -247,7 +248,7 @@ int main(void)
 
   for(uint32_t i = 0; i < NUM_PIXELS; i++) {
     //generate test pattern of increasing brightness
-    uint8_t c = i * 2;
+    uint8_t c = i;
     // if(i % 2 == 0)
     //   frameBuf[i] = 0xFFFFFFFF;
     frameBuf[i] = c << 24 | c << 16 | c << 8 | c;

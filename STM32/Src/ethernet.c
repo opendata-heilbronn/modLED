@@ -97,10 +97,10 @@ void initEthernet() {
   UART_Printf("Initializing Ethernet...");
 
   // Reset ethernet module. Does not improve communicatoin either...
-  HAL_GPIO_WritePin(ETH_RESET_PIN, 0);
-  HAL_Delay(1);
-  HAL_GPIO_WritePin(ETH_RESET_PIN, 1);
-  HAL_Delay(400);
+//   HAL_GPIO_WritePin(ETH_RESET_PIN, 0);
+//   HAL_Delay(1);
+//   HAL_GPIO_WritePin(ETH_RESET_PIN, 1);
+//   HAL_Delay(400);
   
   reg_wizchip_cs_cbfunc(&spiStart, &spiStop);
   reg_wizchip_spi_cbfunc(&spiReadByte, &spiWriteByte);

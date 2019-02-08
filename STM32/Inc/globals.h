@@ -20,10 +20,11 @@ extern SPI_HandleTypeDef    hspi2;
 #define SPI2_NSS            GPIOB, GPIO_PIN_12
 #define ETH_RESET_PIN       GPIOB, GPIO_PIN_11
 #define SOCKET_DHCP         0
-#define SOCKET_OPC          1
+#define SOCKET_ARTNET       1
+#define SOCKET_OPC          2
 // #define STATIC_IP       192, 168, 178, 250 // comment out for DHCP
 
-#define PANEL_HEIGHT        8
+#define PANEL_HEIGHT        16
 #define PANEL_WIDTH         16
 #define NUM_PIXELS          (PANEL_HEIGHT * PANEL_WIDTH)
 #define PWM_RESOLUTION      7
