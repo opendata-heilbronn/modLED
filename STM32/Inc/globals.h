@@ -1,4 +1,5 @@
 #pragma once
+#include "stm32f1xx_hal.h"
 
 #define DMA_TIMER       htim1
 #define DMA_CHANNEL     TIM_CHANNEL_1 //PA08
@@ -13,12 +14,14 @@
 #define PIN_LAT GPIOB, GPIO_PIN_5
 #define PIN_LED GPIOC, GPIO_PIN_13
 
-#define _WIZCHIP_       5500
-#define ETH_SPI         hspi2
-#define SPI2_NSS        GPIOB, GPIO_PIN_12
-#define ETH_RESET_PIN   GPIOB, GPIO_PIN_11
-#define SOCKET_DHCP     0
-#define SOCKET_OPC      1
+#define _WIZCHIP_           5500
+#define ETH_SPI             hspi2
+extern SPI_HandleTypeDef    hspi2;
+#define SPI2_NSS            GPIOB, GPIO_PIN_12
+#define ETH_RESET_PIN       GPIOB, GPIO_PIN_11
+#define SOCKET_DHCP         0
+#define SOCKET_OPC          1
+// #define STATIC_IP       192, 168, 178, 250 // comment out for DHCP
 
 #define PANEL_HEIGHT        8
 #define PANEL_WIDTH         16
@@ -34,12 +37,14 @@ uint8_t dmaBuf[DMA_BUF_LENGTH]; // buffer for the raw data to be shifted out per
 uint32_t frameBuf[NUM_PIXELS];
 
 #define RX_UART             huart1
+extern UART_HandleTypeDef   huart1;
 #define RX_UART_DMA         hdma_usart1_rx
 #define RX_BAUD             1250000
 #define UART_BUFFER_LENGTH  16
 #define UART_PROTOCOL_INIT  1
 uint8_t uartBuffer[UART_BUFFER_LENGTH];
 uint16_t uartRxCounter;
+#define PRINTF_UART         RX_UART
 
 #define INITAL_BRIGHTNESS   32
 #define GAMMA_STEPS         256
