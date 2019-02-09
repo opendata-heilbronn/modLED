@@ -237,7 +237,7 @@ int main(void)
   MX_SPI2_Init();
   /* USER CODE BEGIN 2 */
 
-  UART_Printf("\nmodLED Matrix Controller starting...\n");
+  printf("\nmodLED Matrix Controller starting...\n");
 
   pwmStepIdx = 0;
   uartRxCounter = 0;
@@ -273,6 +273,10 @@ int main(void)
   HAL_UART_Receive_DMA(&RX_UART, uartBuffer, UART_BUFFER_LENGTH);
 
   initEthernet();
+
+  #ifdef SOCKET_ARTNET
+    initArtnet();
+  #endif
 
 
   // uint8_t pixelPos = 0;
@@ -684,7 +688,7 @@ void _Error_Handler(char *file, int line)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
     /* User can add his own implementation to report the HAL error return state */
-    UART_Printf("ERROR: ran into error in file %s:%d", file, line);
+    printf("ERROR: ran into error in file %s:%d", file, line);
     while(1)
     {
       HAL_GPIO_TogglePin(PIN_LED);

@@ -23,6 +23,7 @@ extern SPI_HandleTypeDef    hspi2;
 #define SOCKET_ARTNET       1
 #define SOCKET_OPC          2
 // #define STATIC_IP       192, 168, 178, 250 // comment out for DHCP
+#define PORT_ARTNET         6454
 
 #define PANEL_HEIGHT        16
 #define PANEL_WIDTH         16

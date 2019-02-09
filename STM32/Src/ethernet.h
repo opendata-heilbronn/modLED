@@ -14,3 +14,4 @@
 
 
 void initEthernet();
+void initArtnet();

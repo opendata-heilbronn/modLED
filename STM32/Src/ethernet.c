@@ -42,17 +42,17 @@ void generateMAC(uint8_t* macArray) {
 volatile bool ipAssigned = false;
 
 void cbkIPAssigned() {
-  UART_Printf("IP assigned!\n");
+  printf("IP assigned!\n");
   ipAssigned = true;
 }
 
 void cbkIPConflict() {
-  UART_Printf("ERROR: IP conflict!\n");
+  printf("ERROR: IP conflict!\n");
 }
 
 //unused and untested for now
 void doDHCP() {
-  UART_Printf("Beginning DHCP...\n");
+  printf("Beginning DHCP...\n");
   uint8_t dhcp_buffer[1024];
   wiz_NetInfo netInfo = {
     .dhcp = NETINFO_DHCP
@@ -73,7 +73,7 @@ void doDHCP() {
   }
 
   if(!ipAssigned) {
-    UART_Printf("ERROR: no IP was assigned in time \n");
+    printf("ERROR: no IP was assigned in time \n");
     return;
   }
 
@@ -82,7 +82,7 @@ void doDHCP() {
   getSNfromDHCP(netInfo.sn);
   getDNSfromDHCP(netInfo.dns);
 
-  UART_Printf("IP:  %d.%d.%d.%d\nGW:  %d.%d.%d.%d\nNet: %d.%d.%d.%d\nDNS: %d.%d.%d.%d\n",
+  printf("IP:  %d.%d.%d.%d\nGW:  %d.%d.%d.%d\nNet: %d.%d.%d.%d\nDNS: %d.%d.%d.%d\n",
     netInfo.ip[0], netInfo.ip[1], netInfo.ip[2], netInfo.ip[3],
     netInfo.gw[0], netInfo.gw[1], netInfo.gw[2], netInfo.gw[3],
     netInfo.sn[0], netInfo.sn[1], netInfo.sn[2], netInfo.sn[3],
@@ -94,7 +94,7 @@ void doDHCP() {
 }
 
 void initEthernet() {
-  UART_Printf("Initializing Ethernet...");
+  printf("Initializing Ethernet...");
 
   // Reset ethernet module. Does not improve communicatoin either...
 //   HAL_GPIO_WritePin(ETH_RESET_PIN, 0);
@@ -121,7 +121,7 @@ void initEthernet() {
 
   getSHAR(mac);
 
-  UART_Printf(" done. MAC: %02X:%02X:%02X:%02X:%02X:%02X\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  printf(" done. MAC: %02X:%02X:%02X:%02X:%02X:%02X\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
   #ifdef STATIC_IP
     uint8_t ip[4] = { 192, 168, 178, 250 };
@@ -137,3 +137,25 @@ void initEthernet() {
     doDHCP();
   #endif
 }
+
+#ifdef SOCKET_ARTNET
+#define ARTNET_HEADER_LENGTH 18
+#define ARTNET_PACKAGE_LEGNTH (ARTNET_HEADER_LENGTH + (128 * 3))
+uint8_t artnetBuf[ARTNET_PACKAGE_LEGNTH];
+
+void initArtnet() {
+    int8_t status = socket(SOCKET_ARTNET, Sn_MR_UDP, PORT_ARTNET, 0);
+    if(status < 0) {
+        printf("ERROR creating ArtNet socket. Error code: %d", status);
+        return;
+    }
+
+    uint8_t dstIp[4];
+    uint16_t dstPort;
+    int32_t rStatus = recvfrom(SOCKET_ARTNET, artnetBuf, ARTNET_PACKAGE_LEGNTH, dstIp, &dstPort);
+    if(rStatus < 0) {
+        printf("ERROR receiving UDP package. Error code: %ld", rStatus);
+    }
+}
+
+#endif
