@@ -25,9 +25,10 @@ extern SPI_HandleTypeDef    hspi2;
 // #define STATIC_IP       192, 168, 178, 250 // comment out for DHCP
 #define PORT_ARTNET         6454
 
-#define PANEL_HEIGHT        16
-#define PANEL_WIDTH         16
-#define NUM_PIXELS          (PANEL_HEIGHT * PANEL_WIDTH)
+#define PANEL_PIXEL_NUM     128 // amount of pixels of single panel
+#define PIXEL_HEIGHT        16  // number of rows across all panels
+#define PIXEL_WIDTH         16
+#define NUM_PIXELS          (PIXEL_HEIGHT * PIXEL_WIDTH)
 #define PWM_RESOLUTION      7
 #define MIN_PWM_PRESCALER   18  //TODO: attention, prescale will not fit into 16 bits, if PWM_RESOLUTION > 10
 //minor glitching at PSC 9, further down glitching becomes worse, DMA is not fast enough to keep up (160ns minimum pulse time)

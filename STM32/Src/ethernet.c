@@ -124,7 +124,7 @@ void initEthernet() {
   printf(" done. MAC: %02X:%02X:%02X:%02X:%02X:%02X\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
   #ifdef STATIC_IP
-    uint8_t ip[4] = { 192, 168, 178, 250 };
+    uint8_t ip[4] = { STATIC_IP };
     setSIPR(ip); //set client IP
 
     ip[3] = 1;
@@ -140,21 +140,54 @@ void initEthernet() {
 
 #ifdef SOCKET_ARTNET
 #define ARTNET_HEADER_LENGTH 18
-#define ARTNET_PACKAGE_LEGNTH (ARTNET_HEADER_LENGTH + (128 * 3))
-uint8_t artnetBuf[ARTNET_PACKAGE_LEGNTH];
+#define PIXEL_DATA_LENGTH (PANEL_PIXEL_NUM * 3)
+#define ARTNET_PACKAGE_LENGTH (ARTNET_HEADER_LENGTH + PIXEL_DATA_LENGTH)
+uint8_t artnetBuf[ARTNET_PACKAGE_LENGTH];
 
 void initArtnet() {
+    printf("Creating ArtNet listener...");
     int8_t status = socket(SOCKET_ARTNET, Sn_MR_UDP, PORT_ARTNET, 0);
     if(status < 0) {
-        printf("ERROR creating ArtNet socket. Error code: %d", status);
+        printf("\nERROR creating ArtNet socket. Error code: %d\n", status);
         return;
     }
+    printf(" done.\n");
+}
 
-    uint8_t dstIp[4];
-    uint16_t dstPort;
-    int32_t rStatus = recvfrom(SOCKET_ARTNET, artnetBuf, ARTNET_PACKAGE_LEGNTH, dstIp, &dstPort);
-    if(rStatus < 0) {
-        printf("ERROR receiving UDP package. Error code: %ld", rStatus);
+void artnetCallback(artnetPacket packet) {
+    uint8_t offset = packet.universe == 1 ? 0 : PANEL_PIXEL_NUM;
+    uint8_t* d = packet.data;
+    for(uint8_t i = 0; i < PANEL_PIXEL_NUM; i++) {
+        uint16_t c = i * 3;
+        frameBuf[i + offset] = d[c] << 24 | d[c] << 16 | d[c+1] << 8 | d[c+2];
+    }
+}
+
+void loopArtnet() {
+    if(getSn_RX_RSR(SOCKET_ARTNET) > 0) {
+        uint8_t dstIp[4];
+        uint16_t dstPort;
+        int32_t rStatus = recvfrom(SOCKET_ARTNET, artnetBuf, ARTNET_PACKAGE_LENGTH, dstIp, &dstPort);
+        if(rStatus < 0) {
+            printf("ERROR receiving UDP package. Error code: %ld\n", rStatus);
+        }
+
+        if(dstPort == PORT_ARTNET) {
+            artnetPacket packet;
+            //check if ArtNrt header present
+            if(strncmp((const char*)artnetBuf, "Art-Net\0", 8) != 0) {
+                return;
+            }
+            packet.opcode = artnetBuf[8] | artnetBuf[9] << 8;
+            if(packet.opcode == 0x5000) { // check if opcode equals Art-Net opcode
+                packet.sequence = artnetBuf[12];
+                packet.universe = artnetBuf[14] | artnetBuf[15] << 8;
+                packet.dataLength = artnetBuf[17] | artnetBuf[16] << 8;
+                packet.data = &artnetBuf[ARTNET_HEADER_LENGTH];
+
+                artnetCallback(packet);
+            }
+        }
     }
 }
 

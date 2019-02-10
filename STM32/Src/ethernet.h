@@ -12,6 +12,15 @@
 #include "socket.h"
 #include "DHCP/dhcp.h"
 
+typedef struct {
+    uint16_t opcode;
+    uint8_t sequence;
+    uint16_t universe;
+    uint16_t dataLength;
+    uint8_t* data;
+} artnetPacket;
+
 
 void initEthernet();
 void initArtnet();
+void loopArtnet();

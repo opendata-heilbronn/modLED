@@ -42,13 +42,17 @@
 
 /* USER CODE BEGIN Includes */
 
-// TODO:
-// Fix last Pixel dimly glowing
-//    Adding dead-time should help 
-// Gamma second implementation (full brightness, no global dimming.) 
-//    Either by modifying PWM values, but would be losing resolution
-//    Or by selecting the next PWM step to show by gamma (would mean rewrite of the current DMA logic)
-// Maybe USB to Serial on-board? dunno, probably too complicated
+/** ========= TODO: =========
+ * OPC protocol
+ * DHCP retry
+ * Fix random crash after a few seconds of startup (intermittent)
+ * Control global brightness over network
+ * Show IP on startup
+ * (?) Change DMA routine to include clock and latch signals, to improve speed further
+ */
+
+
+
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -117,9 +121,9 @@ void setGlobalBrightness(uint8_t brightness) {
 }
 
 void mapFrameBuf() {
-  for(uint16_t y = 0; y < PANEL_HEIGHT; y++) {
-    uint16_t rowIndex = y * PANEL_WIDTH;
-    for(uint16_t x = 0; x < PANEL_WIDTH; x++) {
+  for(uint16_t y = 0; y < PIXEL_HEIGHT; y++) {
+    uint16_t rowIndex = y * PIXEL_WIDTH;
+    for(uint16_t x = 0; x < PIXEL_WIDTH; x++) {
       uint16_t pixelIndex = rowIndex + x;
       uint32_t pixelColor = frameBuf[pixelIndex];
 
@@ -292,6 +296,8 @@ int main(void)
   /* USER CODE BEGIN 3 */
     HAL_GPIO_TogglePin(PIN_LED);
 
+    loopArtnet();
+
     //generate test pattern
     // frameBuf[pixelPos % NUM_PIXELS] = 0;
     // frameBuf[(pixelPos + 1) % NUM_PIXELS] = 0xFFFFFFFF;
@@ -367,7 +373,7 @@ static void MX_SPI2_Init(void)
   hspi2.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi2.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi2.Init.NSS = SPI_NSS_HARD_OUTPUT;
-  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_32;
+  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
   hspi2.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi2.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
