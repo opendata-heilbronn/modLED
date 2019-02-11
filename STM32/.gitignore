@@ -11,3 +11,4 @@ readme.txt
 .vscode/launch.json
 .mxproject
 *.jdebug*
+*.logicdata

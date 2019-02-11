@@ -49,6 +49,7 @@
  * Control global brightness over network
  * Show IP on startup
  * (?) Change DMA routine to include clock and latch signals, to improve speed further
+ * Network bootloader
  */
 
 
