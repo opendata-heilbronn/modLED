@@ -42,13 +42,18 @@
 
 /* USER CODE BEGIN Includes */
 
-// TODO:
-// Fix last Pixel dimly glowing
-//    Adding dead-time should help 
-// Gamma second implementation (full brightness, no global dimming.) 
-//    Either by modifying PWM values, but would be losing resolution
-//    Or by selecting the next PWM step to show by gamma (would mean rewrite of the current DMA logic)
-// Maybe USB to Serial on-board? dunno, probably too complicated
+/** ========= TODO: =========
+ * OPC protocol
+ * DHCP retry
+ * Fix random crash after a few seconds of startup (intermittent)
+ * Control global brightness over network
+ * Show IP on startup
+ * (?) Change DMA routine to include clock and latch signals, to improve speed further
+ * Network bootloader
+ */
+
+
+
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -56,9 +61,14 @@
 #include <stdbool.h>
 #include <math.h>
 #include "globals.h"
+
+#include "ethernet.h"
+#include "uart.h"
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
+SPI_HandleTypeDef hspi2;
+
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
@@ -66,6 +76,7 @@ DMA_HandleTypeDef hdma_tim1_ch1;
 
 UART_HandleTypeDef huart1;
 DMA_HandleTypeDef hdma_usart1_rx;
+DMA_HandleTypeDef hdma_usart1_tx;
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
@@ -79,7 +90,9 @@ static void MX_DMA_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_TIM1_Init(void);
-static void MX_TIM2_Init(void);                                    
+static void MX_TIM2_Init(void);
+static void MX_SPI2_Init(void);
+                                    
 void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
                                 
                                 
@@ -109,14 +122,15 @@ void setGlobalBrightness(uint8_t brightness) {
 }
 
 void mapFrameBuf() {
-  for(uint16_t y = 0; y < PANEL_HEIGHT; y++) {
-    uint16_t rowIndex = y * PANEL_WIDTH;
-    for(uint16_t x = 0; x < PANEL_WIDTH; x++) {
+  for(uint16_t y = 0; y < PIXEL_HEIGHT; y++) {
+    uint16_t rowIndex = y * PIXEL_WIDTH;
+    for(uint16_t x = 0; x < PIXEL_WIDTH; x++) {
       uint16_t pixelIndex = rowIndex + x;
       uint32_t pixelColor = frameBuf[pixelIndex];
 
       // does not differentiate between upper and lower half
       uint16_t matrixIndex = ((x / 4) * 16) + ((y % 4) * 4) + (x % 4); 
+      matrixIndex += 64 * (y / 8); //offset for next panel
 
       bool half = (y / 4) % 2; // 0 = upper half, 1 = lower half
 
@@ -126,7 +140,7 @@ void mapFrameBuf() {
         uint8_t bitToSet =  1 << (half * 4 + (3 - colorIdx));
 
         for(uint16_t pwmStep = 0; pwmStep < PWM_RESOLUTION; pwmStep++) {
-          uint16_t pwmIndex = pwmStep * NUM_PIXELS / 2;
+          uint16_t pwmIndex = pwmStep * NUM_PIXELS / 2; 
 
           if(brightness & (1 << pwmStep)) {
             dmaBuf[pwmIndex + matrixIndex] |= bitToSet;
@@ -140,30 +154,6 @@ void mapFrameBuf() {
   }
 }
 
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef* huart) {
-  if(huart == &RX_UART) {
-    for(uint8_t i = 0; i < UART_BUFFER_LENGTH; i++) {
-      if(uartRxCounter == 0) { // packet preamble
-        if(uartBuffer[i] != UART_PROTOCOL_INIT) { //when received packet does not match preamble
-          uartRxCounter--; // wait for next
-        }
-      }
-      else {
-        uint16_t byteId = (uartRxCounter - 1);
-        uint8_t val = uartBuffer[i];
-        switch(byteId % 3) {
-          case 0: frameBuf[byteId / 3] &= 0x0000FFFF; frameBuf[byteId / 3] |= (val << 24 | val << 16); break;
-          case 1: frameBuf[byteId / 3] &= 0xFFFF00FF; frameBuf[byteId / 3] |= val << 8; break;
-          case 2: frameBuf[byteId / 3] &= 0xFFFFFF00; frameBuf[byteId / 3] |= val; break;
-        }
-      }
-
-      uartRxCounter++;
-      if(uartRxCounter >= (NUM_PIXELS * 3) + 1)
-        uartRxCounter = 0;
-    }
-  }
-}
 
 void startDMA() {
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, 1);
@@ -212,6 +202,7 @@ void ISR_TIM2() {
 
 }
 
+
 /* USER CODE END 0 */
 
 /**
@@ -248,7 +239,10 @@ int main(void)
   MX_TIM3_Init();
   MX_TIM1_Init();
   MX_TIM2_Init();
+  MX_SPI2_Init();
   /* USER CODE BEGIN 2 */
+
+  printf("\nmodLED Matrix Controller starting...\n");
 
   pwmStepIdx = 0;
   uartRxCounter = 0;
@@ -259,7 +253,7 @@ int main(void)
 
   for(uint32_t i = 0; i < NUM_PIXELS; i++) {
     //generate test pattern of increasing brightness
-    uint8_t c = i * 2;
+    uint8_t c = i;
     // if(i % 2 == 0)
     //   frameBuf[i] = 0xFFFFFFFF;
     frameBuf[i] = c << 24 | c << 16 | c << 8 | c;
@@ -278,16 +272,19 @@ int main(void)
   __HAL_TIM_ENABLE_IT(&DMA_TIMER, TIM_IT_UPDATE);
   
   startDMA();
-  // HAL_TIM_PWM_Start(&DMA_TIMER, DMA_CHANNEL);
-  // HAL_TIM_PWM_Start(&LATCH_TIMER, LATCH_CHANNEL);
   
   HAL_TIM_PWM_Start(&PWM_TIMER, PWM_CHANNEL);
 
   HAL_UART_Receive_DMA(&RX_UART, uartBuffer, UART_BUFFER_LENGTH);
 
-  //HAL_GPIO_WritePin(PIN_OE, 0);
+  initEthernet();
 
-  uint8_t pixelPos = 0;
+  #ifdef SOCKET_ARTNET
+    initArtnet();
+  #endif
+
+
+  // uint8_t pixelPos = 0;
 
   /* USER CODE END 2 */
 
@@ -298,16 +295,18 @@ int main(void)
   /* USER CODE END WHILE */
 
   /* USER CODE BEGIN 3 */
-  HAL_GPIO_TogglePin(PIN_LED);
+    HAL_GPIO_TogglePin(PIN_LED);
 
-  //generate test pattern
-  // frameBuf[pixelPos % NUM_PIXELS] = 0;
-  // frameBuf[(pixelPos + 1) % NUM_PIXELS] = 0xFFFFFFFF;
-  // pixelPos++;
-  // HAL_Delay(100);
+    loopArtnet();
 
-  // map frame buffer to DMA buffer
-  mapFrameBuf();
+    //generate test pattern
+    // frameBuf[pixelPos % NUM_PIXELS] = 0;
+    // frameBuf[(pixelPos + 1) % NUM_PIXELS] = 0xFFFFFFFF;
+    // pixelPos++;
+    // HAL_Delay(100);
+
+    // map frame buffer to DMA buffer
+    mapFrameBuf();
   }
   /* USER CODE END 3 */
 
@@ -361,6 +360,30 @@ void SystemClock_Config(void)
 
   /* SysTick_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
+}
+
+/* SPI2 init function */
+static void MX_SPI2_Init(void)
+{
+
+  /* SPI2 parameter configuration*/
+  hspi2.Instance = SPI2;
+  hspi2.Init.Mode = SPI_MODE_MASTER;
+  hspi2.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi2.Init.DataSize = SPI_DATASIZE_8BIT;
+  hspi2.Init.CLKPolarity = SPI_POLARITY_LOW;
+  hspi2.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi2.Init.NSS = SPI_NSS_HARD_OUTPUT;
+  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+  hspi2.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  hspi2.Init.TIMode = SPI_TIMODE_DISABLE;
+  hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  hspi2.Init.CRCPolynomial = 10;
+  if (HAL_SPI_Init(&hspi2) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
 }
 
 /* TIM1 init function */
@@ -579,6 +602,9 @@ static void MX_DMA_Init(void)
   /* DMA1_Channel2_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
+  /* DMA1_Channel4_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel4_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel4_IRQn);
   /* DMA1_Channel5_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel5_IRQn);
@@ -613,6 +639,9 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_5, GPIO_PIN_RESET);
 
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, GPIO_PIN_SET);
+
   /*Configure GPIO pin : PC13 */
   GPIO_InitStruct.Pin = GPIO_PIN_13;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
@@ -633,6 +662,13 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PB11 */
+  GPIO_InitStruct.Pin = GPIO_PIN_11;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
@@ -659,6 +695,7 @@ void _Error_Handler(char *file, int line)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
     /* User can add his own implementation to report the HAL error return state */
+    printf("ERROR: ran into error in file %s:%d", file, line);
     while(1)
     {
       HAL_GPIO_TogglePin(PIN_LED);

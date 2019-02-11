@@ -9,7 +9,7 @@ The board used is a BluePill with a STM32F103C8T6.
 | GND       | GND        |
 | OE        | PB4        |
 | LAT       | PB5        |
-| CLK       | PB6        |
+| CLK       | PA8        |
 | 1RD1      | PA0        |
 | 2RD1      | PA1        |
 | GD1       | PA2        |
