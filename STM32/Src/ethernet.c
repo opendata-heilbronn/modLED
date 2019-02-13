@@ -53,6 +53,10 @@ void cbkIPConflict() {
 //unused and untested for now
 void doDHCP() {
   printf("Beginning DHCP...\n");
+  clearDisplay();
+  dispPrintf(0, 5, WHITE, "DHCP");
+  dispPrintf(3, 11, RED, "...");
+
   uint8_t dhcp_buffer[1024];
   wiz_NetInfo netInfo = {
     .dhcp = NETINFO_DHCP
@@ -74,6 +78,7 @@ void doDHCP() {
 
   if(!ipAssigned) {
     printf("ERROR: no IP was assigned in time \n");
+    initEthernet();
     return;
   }
 
@@ -88,6 +93,11 @@ void doDHCP() {
     netInfo.sn[0], netInfo.sn[1], netInfo.sn[2], netInfo.sn[3],
     netInfo.dns[0], netInfo.dns[1], netInfo.dns[2], netInfo.dns[3]
   );
+
+  clearDisplay();
+  dispPrintf(0, 4, RED, "%.3d.", netInfo.ip[1]);
+  dispPrintf(0, 9, GREEN, "%.3d.", netInfo.ip[2]);
+  dispPrintf(0, 14, BLUE, "%.3d", netInfo.ip[3]);
 
   wizchip_setnetinfo(&netInfo);
   

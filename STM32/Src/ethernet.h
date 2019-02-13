@@ -5,6 +5,7 @@
 #include "globals.h"
 #include "uart.h"
 #include "main.h"
+#include "display.h"
 
 //these includes are correctly handled during platform io build
 // they probably won't work with the stock makefile, changes are needed

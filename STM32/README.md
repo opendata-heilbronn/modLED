@@ -3,6 +3,8 @@ The STM32 panel driver uses DMA to shift the data to the panels.
 
 The board used is a BluePill with a STM32F103C8T6.
 
+For development updates and pictures, visit [#modLED](https://twitter.com/hashtag/modled?f=tweets) on Twitter.
+
 ## Connections
 | Panel Pin | STM32 GPIO |
 | --------- | ---------- |
