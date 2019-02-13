@@ -81,10 +81,11 @@ void cbkIPConflict() {
 void doDHCP() {
   prevEthState = ethState;
   ethState = ETH_DHCP_STARTED;
+  dhcpStarted = HAL_GetTick();
+
   printf("Beginning DHCP...\n");
   clearDisplay();
   dispPrintf(0, 5, WHITE, "DHCP");
-  dispPrintf(3, 11, GREEN, "...");
   updateDisplay();
 
   uint8_t dhcp_buffer[1024];
@@ -94,6 +95,9 @@ void doDHCP() {
 }
 
 void initEthernet() {
+  lastDhcpTick = 0;
+  dhcpRuns = 0;
+  
   ethState = ETH_UNINITIALIZED;
   prevEthState = ethState;
   printf("Initializing Ethernet...");
@@ -146,8 +150,6 @@ void initEthernet() {
   #endif
 }
 
-uint8_t dhcpRetries = 0;
-uint32_t lastDhcpTick = 0;
 void loopEthernet() {
 
   switch(ethState) {
@@ -156,17 +158,11 @@ void loopEthernet() {
       break;
 
     case ETH_DHCP_STARTED:
-      if(dhcpRetries >= MAX_DHCP_RETRIES) {
-        prevEthState = ethState;
-        ethState = DHCP_FAILED;
-        return;
-      }
       // if successful, sets ethState in DHCP callback
-      volatile uint8_t ret = 1;
-      while (ret == 1) {
-        ret = DHCP_run();
+      if (DHCP_run() == DHCP_FAILED) {
+        prevEthState = ethState;
+        ethState = ETH_DHCP_FAILED;
       }
-      dhcpRetries++;
       break;
 
     case ETH_DHCP_FAILED:
@@ -174,7 +170,7 @@ void loopEthernet() {
       drawRect(0, 7, 16, 5, BLACK);
       dispPrintf(3, 7+4, RED, "ERR");
       updateDisplay();
-      initEthernet(); // reinitialize Ethernet (good idea?)
+      doDHCP(); // restart DHCP loop
       break;
 
     case ETH_IP_ASSIGNED:
@@ -191,6 +187,17 @@ void loopEthernet() {
     case ETH_UNINITIALIZED:
     case ETH_INIT_FAILED:
       break;
+  }
+
+
+  if(HAL_GetTick() > lastDhcpTick + 1000) {
+    lastDhcpTick = HAL_GetTick();
+    DHCP_time_handler();
+
+    if(ethState == ETH_DHCP_STARTED) {
+      uint8_t dot = (HAL_GetTick() - dhcpStarted - 500) / 1000;
+      drawPixel(dot % 10, 8 + dot / 10, GREEN);
+    }
   }
 }
 

@@ -44,8 +44,8 @@ void drawPixel(int8_t x, int8_t y, uint32_t rrgb) {
 }
 
 void drawRect(int8_t x, int8_t y, int8_t w, int8_t h, uint32_t rrgb) {
-    for(uint8_t xPos = x; x < x + w; x++) {
-        for(uint8_t yPos = y; y < y + h; y++) {
+    for(uint8_t xPos = x; xPos < x + w; xPos++) {
+        for(uint8_t yPos = y; yPos < y + h; yPos++) {
             drawPixel(xPos, yPos, rrgb);
         }
     }

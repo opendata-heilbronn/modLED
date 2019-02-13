@@ -34,3 +34,6 @@ void initEthernet();
 void loopEthernet();
 void initArtnet();
 void loopArtnet();
+
+uint8_t dhcpRetries;
+uint32_t lastDhcpTick, dhcpRuns, dhcpStarted;

@@ -44,8 +44,6 @@
 
 /** ========= TODO: =========
  * OPC protocol
- * DHCP retry
- * Fix random crash after a few seconds of startup (intermittent, maybe SPI Speed)
  * Control global brightness over network
  * (?) Change DMA routine to include clock and latch signals, to improve speed further
  * (?) Network bootloader
