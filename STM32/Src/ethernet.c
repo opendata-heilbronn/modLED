@@ -5,7 +5,6 @@ void spiStart() {
 }
 
 void spiStop() {
-  // while(__HAL_SPI_GET_FLAG(&ETH_SPI, SPI_SR_BSY)); //maybe needed, dunno
   __HAL_SPI_DISABLE(&ETH_SPI);
 }
 
@@ -43,45 +42,12 @@ volatile bool ipAssigned = false;
 
 void cbkIPAssigned() {
   printf("IP assigned!\n");
-  ipAssigned = true;
-}
 
-void cbkIPConflict() {
-  printf("ERROR: IP conflict!\n");
-}
-
-//unused and untested for now
-void doDHCP() {
-  printf("Beginning DHCP...\n");
-  clearDisplay();
-  dispPrintf(0, 5, WHITE, "DHCP");
-  dispPrintf(3, 11, RED, "...");
-
-  uint8_t dhcp_buffer[1024];
   wiz_NetInfo netInfo = {
     .dhcp = NETINFO_DHCP
   };
-  generateMAC(netInfo.mac);
 
-  setSHAR(netInfo.mac);
-
-  DHCP_init(SOCKET_DHCP, dhcp_buffer);
-
-  reg_dhcp_cbfunc(cbkIPAssigned, cbkIPAssigned, cbkIPConflict);
-
-  //should probably be called in main loop, but test for now if it even works at all
-  uint32_t repeats = 10000;
-  while(!ipAssigned && repeats > 0) {
-    DHCP_run();
-    repeats--;
-  }
-
-  if(!ipAssigned) {
-    printf("ERROR: no IP was assigned in time \n");
-    initEthernet();
-    return;
-  }
-
+  getSHAR(netInfo.mac);
   getIPfromDHCP(netInfo.ip);
   getGWfromDHCP(netInfo.gw);
   getSNfromDHCP(netInfo.sn);
@@ -98,19 +64,39 @@ void doDHCP() {
   dispPrintf(0, 4, RED, "%.3d.", netInfo.ip[1]);
   dispPrintf(0, 9, GREEN, "%.3d.", netInfo.ip[2]);
   dispPrintf(0, 14, BLUE, "%.3d", netInfo.ip[3]);
+  updateDisplay();
 
   wizchip_setnetinfo(&netInfo);
-  
+
+  ipAssigned = true;
+  prevEthState = ethState;
+  ethState = ETH_IP_ASSIGNED;
+}
+
+void cbkIPConflict() {
+  printf("ERROR: IP conflict!\n");
+}
+
+
+void doDHCP() {
+  prevEthState = ethState;
+  ethState = ETH_DHCP_STARTED;
+  printf("Beginning DHCP...\n");
+  clearDisplay();
+  dispPrintf(0, 5, WHITE, "DHCP");
+  dispPrintf(3, 11, GREEN, "...");
+  updateDisplay();
+
+  uint8_t dhcp_buffer[1024];
+  DHCP_init(SOCKET_DHCP, dhcp_buffer);
+
+  reg_dhcp_cbfunc(cbkIPAssigned, cbkIPAssigned, cbkIPConflict);
 }
 
 void initEthernet() {
+  ethState = ETH_UNINITIALIZED;
+  prevEthState = ethState;
   printf("Initializing Ethernet...");
-
-  // Reset ethernet module. Does not improve communicatoin either...
-//   HAL_GPIO_WritePin(ETH_RESET_PIN, 0);
-//   HAL_Delay(1);
-//   HAL_GPIO_WritePin(ETH_RESET_PIN, 1);
-//   HAL_Delay(400);
   
   reg_wizchip_cs_cbfunc(&spiStart, &spiStop);
   reg_wizchip_spi_cbfunc(&spiReadByte, &spiWriteByte);
@@ -119,8 +105,6 @@ void initEthernet() {
   uint8_t tx_size[8] = { 2, 2, 2, 2, 2, 2, 2, 2 }; // Device default memory setting
   uint8_t rx_size[8] = { 2, 2, 2, 2, 2, 2, 2, 2 };
 
-  //executes getMAC & the 3 IPs, afterwards writes 00 00 04 80 for reset
-  // then setMAC & the 3 IPs, but I don't remember seeing that on the logicanalyzer, maybe because of the NULL pointers instead of 0?
   if(wizchip_init(tx_size, rx_size) < 0) { //initialize with default memory settings
     _Error_Handler(__FILE__, __LINE__);
   } 
@@ -129,9 +113,22 @@ void initEthernet() {
   generateMAC(mac);
   setSHAR(mac);
 
-  getSHAR(mac);
+  uint8_t savedMac[6];
+  getSHAR(savedMac);
+
+  if(memcmp(mac, savedMac, sizeof(mac)) != 0) {
+    printf(" FAILED. Wrong MAC received back. Check SPI connections.\n");
+    drawRect(0, 7, 16, 5, BLACK);
+    dispPrintf(0, 7+4, BLUE, "E");
+    dispPrintf(4, 7+4, RED, "ERR");
+    updateDisplay();
+    return;
+  }
 
   printf(" done. MAC: %02X:%02X:%02X:%02X:%02X:%02X\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  
+  prevEthState = ethState;
+  ethState = ETH_INIT_DONE;
 
   #ifdef STATIC_IP
     uint8_t ip[4] = { STATIC_IP };
@@ -143,10 +140,64 @@ void initEthernet() {
     memset(ip, 0xFF, 3);
     ip[3] = 0;
     setSUBR(ip); //set subnet mask*/
-  #else
-    doDHCP();
+
+    prevEthState = ethState;
+    ethState = ETH_IP_ASSIGNED;
   #endif
 }
+
+uint8_t dhcpRetries = 0;
+uint32_t lastDhcpTick = 0;
+void loopEthernet() {
+
+  switch(ethState) {
+    case ETH_INIT_DONE:
+      doDHCP();
+      break;
+
+    case ETH_DHCP_STARTED:
+      if(dhcpRetries >= MAX_DHCP_RETRIES) {
+        prevEthState = ethState;
+        ethState = DHCP_FAILED;
+        return;
+      }
+      // if successful, sets ethState in DHCP callback
+      volatile uint8_t ret = 1;
+      while (ret == 1) {
+        ret = DHCP_run();
+      }
+      dhcpRetries++;
+      break;
+
+    case ETH_DHCP_FAILED:
+      printf("ERROR: no IP was assigned in time \n");
+      drawRect(0, 7, 16, 5, BLACK);
+      dispPrintf(3, 7+4, RED, "ERR");
+      updateDisplay();
+      initEthernet(); // reinitialize Ethernet (good idea?)
+      break;
+
+    case ETH_IP_ASSIGNED:
+      if(prevEthState != ETH_IP_ASSIGNED) { // if freshly initialized
+        #ifdef SOCKET_ARTNET
+          initArtnet();
+        #endif
+      }
+
+      loopArtnet();
+      prevEthState = ethState;
+      break;
+
+    case ETH_UNINITIALIZED:
+    case ETH_INIT_FAILED:
+      break;
+  }
+}
+
+
+
+
+
 
 #ifdef SOCKET_ARTNET
 #define ARTNET_HEADER_LENGTH 18
