@@ -11,19 +11,22 @@ void setPixel(int8_t x, int8_t y, uint32_t rrgb) {
 }
 
 void dispPrint(int8_t x, int8_t y, uint32_t rrgbColor, const char* text) {
+    // loop through all characters in string
     for(uint8_t i = 0; i < strlen(text); i++) {
-        char c = text[i];
+        char c = text[i];                                       // get character from text
+        // loop through all x positions to draw on
         for(int8_t xPos = x; (xPos < x + FONT_WIDTH) && (xPos < PIXEL_WIDTH); xPos++) {
-            uint8_t xIdx = xPos - x;
-            uint8_t col = DEFAULT_FONT[c - FONT_OFFSET][xIdx];
+            uint8_t xIdx = xPos - x;                            // calculate index (counting from 0)
+            uint8_t col = DEFAULT_FONT[c - FONT_OFFSET][xIdx];  // get the font column from the array
+            // loop through all pixels in column, from bottom to top
             for(int8_t yPos = y; (yPos > y - FONT_HEIGHT) && (yPos >= 0); yPos--) {
-                uint8_t yIdx = y - yPos;
-                if(col & (1 << yIdx)) {
+                uint8_t yIdx = y - yPos;                        // calculate index (counting from 0)
+                if(col & (1 << yIdx)) {                         // check if pixel has to be set by font
                     setPixel(xPos, yPos, rrgbColor);
                 }
             }
         }
-        x += 4;
+        x += 4;                                                 // progress to next character x position
     }
 }
 

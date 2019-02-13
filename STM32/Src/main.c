@@ -45,11 +45,11 @@
 /** ========= TODO: =========
  * OPC protocol
  * DHCP retry
- * Fix random crash after a few seconds of startup (intermittent)
+ * Fix random crash after a few seconds of startup (intermittent, maybe SPI Speed)
  * Control global brightness over network
- * Show IP on startup
  * (?) Change DMA routine to include clock and latch signals, to improve speed further
- * Network bootloader
+ * (?) Network bootloader
+ * (?) Automatic panel recognition by 2D barcode or something like that
  */
 
 
