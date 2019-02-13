@@ -18,12 +18,12 @@
 #define ETH_SPI             hspi2
 extern SPI_HandleTypeDef    hspi2;
 #define SPI2_NSS            GPIOB, GPIO_PIN_12
-#define ETH_RESET_PIN       GPIOB, GPIO_PIN_11
 #define SOCKET_DHCP         0
 #define SOCKET_ARTNET       1
 #define SOCKET_OPC          2
 // #define STATIC_IP       192, 168, 178, 250 // comment out for DHCP
 #define PORT_ARTNET         6454
+#define MAX_DHCP_RETRIES    3
 
 #define PANEL_PIXEL_NUM     128 // amount of pixels of single panel
 #define PIXEL_HEIGHT        16  // number of rows across all panels
@@ -49,7 +49,7 @@ uint8_t uartBuffer[UART_BUFFER_LENGTH];
 uint16_t uartRxCounter;
 #define PRINTF_UART         RX_UART
 
-#define INITAL_BRIGHTNESS   32
+#define INITAL_BRIGHTNESS   80
 #define GAMMA_STEPS         256
 #define GAMMA_CORRECTION    2.2
 uint16_t gammaTable[GAMMA_STEPS];

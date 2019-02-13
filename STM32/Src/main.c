@@ -44,12 +44,10 @@
 
 /** ========= TODO: =========
  * OPC protocol
- * DHCP retry
- * Fix random crash after a few seconds of startup (intermittent)
  * Control global brightness over network
- * Show IP on startup
  * (?) Change DMA routine to include clock and latch signals, to improve speed further
- * Network bootloader
+ * (?) Network bootloader
+ * (?) Automatic panel recognition by 2D barcode or something like that
  */
 
 
@@ -64,6 +62,7 @@
 
 #include "ethernet.h"
 #include "uart.h"
+#include "display.h"
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
@@ -121,46 +120,13 @@ void setGlobalBrightness(uint8_t brightness) {
   __HAL_TIM_SET_COMPARE(&PWM_TIMER, PWM_CHANNEL, brightness);
 }
 
-void mapFrameBuf() {
-  for(uint16_t y = 0; y < PIXEL_HEIGHT; y++) {
-    uint16_t rowIndex = y * PIXEL_WIDTH;
-    for(uint16_t x = 0; x < PIXEL_WIDTH; x++) {
-      uint16_t pixelIndex = rowIndex + x;
-      uint32_t pixelColor = frameBuf[pixelIndex];
-
-      // does not differentiate between upper and lower half
-      uint16_t matrixIndex = ((x / 4) * 16) + ((y % 4) * 4) + (x % 4); 
-      matrixIndex += 64 * (y / 8); //offset for next panel
-
-      bool half = (y / 4) % 2; // 0 = upper half, 1 = lower half
-
-      for(uint8_t colorIdx = 0; colorIdx < 4; colorIdx++) {
-        uint16_t brightness = (pixelColor >> (8 * colorIdx)) & 0xFF;
-        brightness = gammaTable[brightness];
-        uint8_t bitToSet =  1 << (half * 4 + (3 - colorIdx));
-
-        for(uint16_t pwmStep = 0; pwmStep < PWM_RESOLUTION; pwmStep++) {
-          uint16_t pwmIndex = pwmStep * NUM_PIXELS / 2; 
-
-          if(brightness & (1 << pwmStep)) {
-            dmaBuf[pwmIndex + matrixIndex] |= bitToSet;
-          }
-          else {
-            dmaBuf[pwmIndex + matrixIndex] &= ~bitToSet;
-          }
-        }
-      }
-    }
-  }
-}
-
 
 void startDMA() {
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, 1);
+  HAL_GPIO_WritePin(PIN_LAT, 1);
 
   uint32_t dmaBufPos = (uint32_t)dmaBuf + (pwmStepIdx * (NUM_PIXELS / 2));
 
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, 0);
+  HAL_GPIO_WritePin(PIN_LAT, 0);
 
   if(HAL_DMA_GetState(DMA_TIMER.hdma[TIM_DMA_ID_CC1]) == HAL_DMA_STATE_BUSY) {
     HAL_GPIO_TogglePin(PIN_LED);
@@ -251,18 +217,16 @@ int main(void)
     dmaBuf[i] = 0;
   }
 
-  for(uint32_t i = 0; i < NUM_PIXELS; i++) {
-    //generate test pattern of increasing brightness
-    uint8_t c = i;
-    // if(i % 2 == 0)
-    //   frameBuf[i] = 0xFFFFFFFF;
-    frameBuf[i] = c << 24 | c << 16 | c << 8 | c;
-  }
+  clearDisplay();
+  dispPrintf(0, 5, WHITE, "INIT");
+  dispPrintf(2, 5+6, RED, ".");
+  dispPrintf(2+4, 5+6, GREEN, ".");
+  dispPrintf(2+8, 5+6, BLUE, ".");
 
   generateGammaTable();
   setGlobalBrightness(INITAL_BRIGHTNESS);
   //initial framebuffer to DMA buffer mapping
-  mapFrameBuf();
+  updateDisplay();
   
 
   DMA_TIMER.hdma[TIM_DMA_ID_CC1]->XferCpltCallback = dataTransmittedHandler;
@@ -279,10 +243,6 @@ int main(void)
 
   initEthernet();
 
-  #ifdef SOCKET_ARTNET
-    initArtnet();
-  #endif
-
 
   // uint8_t pixelPos = 0;
 
@@ -297,7 +257,7 @@ int main(void)
   /* USER CODE BEGIN 3 */
     HAL_GPIO_TogglePin(PIN_LED);
 
-    loopArtnet();
+    loopEthernet();
 
     //generate test pattern
     // frameBuf[pixelPos % NUM_PIXELS] = 0;
@@ -306,7 +266,7 @@ int main(void)
     // HAL_Delay(100);
 
     // map frame buffer to DMA buffer
-    mapFrameBuf();
+    updateDisplay();
   }
   /* USER CODE END 3 */
 
@@ -374,7 +334,7 @@ static void MX_SPI2_Init(void)
   hspi2.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi2.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi2.Init.NSS = SPI_NSS_HARD_OUTPUT;
-  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_8;
   hspi2.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi2.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -639,9 +599,6 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_5, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, GPIO_PIN_SET);
-
   /*Configure GPIO pin : PC13 */
   GPIO_InitStruct.Pin = GPIO_PIN_13;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
@@ -662,13 +619,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : PB11 */
-  GPIO_InitStruct.Pin = GPIO_PIN_11;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
