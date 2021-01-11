@@ -28,8 +28,7 @@ uint8_t spiReadByte() {
 
 
 void generateMAC(uint8_t* macArray) {
-  uint32_t uid[3];
-  HAL_GetUID(uid);
+  uint32_t* uid = (uint32_t*)UID_BASE;
   macArray[0] = 0x42;
   macArray[1] = (uid[0] >> 0) & 0xFF;
   macArray[2] = (uid[0] >> 8) & 0xFF;
@@ -157,7 +156,7 @@ void loopEthernet() {
       doDHCP();
       break;
 
-    case ETH_DHCP_STARTED:
+    case ETH_DHCP_STARTED: 
       // if successful, sets ethState in DHCP callback
       if (DHCP_run() == DHCP_FAILED) {
         prevEthState = ethState;
@@ -178,9 +177,17 @@ void loopEthernet() {
         #ifdef SOCKET_ARTNET
           initArtnet();
         #endif
+        #ifdef SOCKET_OPC
+          initOPC();
+        #endif
       }
 
-      loopArtnet();
+      #ifdef SOCKET_ARTNET
+          loopArtnet();
+        #endif
+        #ifdef SOCKET_OPC
+          loopOPC();
+        #endif
       prevEthState = ethState;
       break;
 
@@ -233,30 +240,86 @@ void artnetCallback(artnetPacket packet) {
 
 void loopArtnet() {
     if(getSn_RX_RSR(SOCKET_ARTNET) > 0) {
-        uint8_t dstIp[4];
-        uint16_t dstPort;
-        int32_t rStatus = recvfrom(SOCKET_ARTNET, artnetBuf, ARTNET_PACKAGE_LENGTH, dstIp, &dstPort);
+        uint8_t srcIp[4];
+        uint16_t srcPort;
+        int32_t rStatus = recvfrom(SOCKET_ARTNET, artnetBuf, ARTNET_PACKAGE_LENGTH, srcIp, &srcPort);
         if(rStatus < 0) {
             printf("ERROR receiving UDP package. Error code: %ld\n", rStatus);
         }
 
-        if(dstPort == PORT_ARTNET) {
-            artnetPacket packet;
-            //check if ArtNrt header present
-            if(strncmp((const char*)artnetBuf, "Art-Net\0", 8) != 0) {
-                return;
-            }
-            packet.opcode = artnetBuf[8] | artnetBuf[9] << 8;
-            if(packet.opcode == 0x5000) { // check if opcode equals Art-Net opcode
-                packet.sequence = artnetBuf[12];
-                packet.universe = artnetBuf[14] | artnetBuf[15] << 8;
-                packet.dataLength = artnetBuf[17] | artnetBuf[16] << 8;
-                packet.data = &artnetBuf[ARTNET_HEADER_LENGTH];
+        artnetPacket packet;
+        //check if ArtNrt header present
+        if(strncmp((const char*)artnetBuf, "Art-Net\0", 8) != 0) {
+            return;
+        }
+        packet.opcode = artnetBuf[8] | artnetBuf[9] << 8;
+        if(packet.opcode == 0x5000) { // check if opcode equals Art-Net opcode
+            packet.sequence = artnetBuf[12];
+            packet.universe = artnetBuf[14] | artnetBuf[15] << 8;
+            packet.dataLength = artnetBuf[17] | artnetBuf[16] << 8;
+            packet.data = &artnetBuf[ARTNET_HEADER_LENGTH];
 
-                artnetCallback(packet);
+            artnetCallback(packet);
+        }
+    }
+}
+
+#endif
+
+
+#ifdef SOCKET_OPC
+#define OPC_HEADER_LENGTH 4
+#define OPC_PIXEL_DATA_LENGTH (NUM_PIXELS * 3)
+#define OPC_PACKAGE_LENGTH (OPC_HEADER_LENGTH + OPC_PIXEL_DATA_LENGTH)
+uint8_t opcBuf[OPC_PACKAGE_LENGTH];
+
+void initOPC() {
+    printf("Creating OPC listener...");
+    int8_t status = socket(SOCKET_OPC, Sn_MR_UDP, PORT_OPC, 0);
+    if(status < 0) {
+        printf("\nERROR creating OPC socket. Error code: %d\n", status);
+        return;
+    }
+    printf(" done.\n");
+}
+
+void loopOPC() {
+    if(getSn_RX_RSR(SOCKET_OPC) > 0) {
+        uint8_t srcIp[4];
+        uint16_t srcPort;
+        int32_t rStatus = recvfrom(SOCKET_OPC, opcBuf, OPC_PACKAGE_LENGTH, srcIp, &srcPort);
+        if(rStatus < 0) {
+            printf("ERROR receiving UDP package. Error code: %ld\n", rStatus);
+        }
+
+
+        // printf("[OPC] %d.%d.%d.%d:%d\n", srcIp[0], srcIp[1], srcIp[2], srcIp[3], srcPort);
+        opcPacket_t packet;
+        
+        packet.channel = opcBuf[0];
+        packet.command = opcBuf[1];
+        packet.length = opcBuf[2] << 8 | opcBuf[3];
+        packet.data = opcBuf + OPC_HEADER_LENGTH;
+
+
+        // set 8-bit color command
+        if(packet.command == 0) {
+            uint16_t len = MIN(OPC_PIXEL_DATA_LENGTH, packet.length);
+            // ignore channel
+            // printf("[OPC] chan=%d cmd=%d len=%d\n", packet.channel, packet.command, len);
+
+
+            uint8_t* d = packet.data;
+            // printf("%08X %08X %08X %08X\n", d[765] << 24, d[765] << 16, d[766] << 8, d[767]);
+            // copy data to framebuffer
+            for(int i = 0; i < NUM_PIXELS; i++) {
+                uint16_t c = i * 3;
+                // don't read more than data available
+                frameBuf[i] = d[c] << 24 | d[c] << 16 | d[c+1] << 8 | d[c+2];
             }
         }
     }
 }
+
 
 #endif

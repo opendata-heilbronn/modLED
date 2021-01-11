@@ -12,3 +12,4 @@ readme.txt
 .mxproject
 *.jdebug*
 *.logicdata
+.pio

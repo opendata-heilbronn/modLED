@@ -21,6 +21,13 @@ typedef struct {
     uint8_t* data;
 } artnetPacket;
 
+typedef struct {
+    uint8_t channel;
+    uint8_t command;
+    uint16_t length;
+    uint8_t* data;
+} opcPacket_t;
+
 enum ethernetStates {
     ETH_DHCP_FAILED = -2,
     ETH_INIT_FAILED = -1,
@@ -34,6 +41,8 @@ void initEthernet();
 void loopEthernet();
 void initArtnet();
 void loopArtnet();
+void initOPC();
+void loopOPC();
 
 uint8_t dhcpRetries;
 uint32_t lastDhcpTick, dhcpRuns, dhcpStarted;

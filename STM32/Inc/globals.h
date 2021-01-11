@@ -21,8 +21,9 @@ extern SPI_HandleTypeDef    hspi2;
 #define SOCKET_DHCP         0
 #define SOCKET_ARTNET       1
 #define SOCKET_OPC          2
-// #define STATIC_IP       192, 168, 178, 250 // comment out for DHCP
+// #define STATIC_IP       192, 168, 13, 117 // comment out for DHCP
 #define PORT_ARTNET         6454
+#define PORT_OPC            7890
 #define MAX_DHCP_RETRIES    3
 
 #define PANEL_PIXEL_NUM     128 // amount of pixels of single panel
@@ -42,7 +43,7 @@ uint32_t frameBuf[NUM_PIXELS];
 #define RX_UART             huart1
 extern UART_HandleTypeDef   huart1;
 #define RX_UART_DMA         hdma_usart1_rx
-#define RX_BAUD             1250000
+#define RX_BAUD             115200
 #define UART_BUFFER_LENGTH  16
 #define UART_PROTOCOL_INIT  1
 uint8_t uartBuffer[UART_BUFFER_LENGTH];
@@ -57,3 +58,6 @@ uint8_t globalBrightness;
 uint8_t pwmStepIdx;
 
 extern void startDMA();
+
+#define MIN(a,b) (((a)<(b))?(a):(b))
+#define MAX(a,b) (((a)>(b))?(a):(b))
