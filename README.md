@@ -3,6 +3,8 @@ Modular LED panel
 
 **Work in progress**
 
+> :warning: **Make sure to checkout the repo with `--recurse-submodules`**
+
 We picked up 60 used DI-P20F04D RGB LED panels and want to build something with them.
 
 At 30W @ 5V, all 60 panels would draw a combined 1.8kW / 360A on full brightness. So a really beefy power supply, or many small ones are needed.
